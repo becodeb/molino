@@ -1,0 +1,694 @@
+package main
+
+import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
+	"log"
+	"math"
+	mrand "math/rand"
+	"sort"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+	"unicode/utf8"
+)
+
+const (
+	maxSessions   = 120
+	maxPerSession = 60
+	tickRate      = 50 * time.Millisecond
+	sessionIdle   = 20 * time.Minute
+	sessionMaxAge = 4 * time.Hour
+)
+
+type Phase string
+
+const (
+	PhaseLobby     Phase = "lobby"
+	PhaseCountdown Phase = "countdown"
+	PhasePlay      Phase = "play"
+	PhasePaused    Phase = "paused"
+	PhaseEnd       Phase = "end"
+)
+
+type Player struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Team  int    `json:"team"`
+	Role  Role   `json:"role"`
+	token string
+	conn  *Client
+}
+
+type Team struct {
+	Index int    `json:"i"`
+	Name  string `json:"name"`
+	sim   *Sim
+}
+
+type Client struct {
+	send      chan []byte
+	player    *Player // nil para profe y espectadores
+	teacher   bool
+	watchTeam int // equipo que mira un espectador; -1 si no corresponde
+}
+
+func (c *Client) push(b []byte) {
+	select {
+	case c.send <- b:
+	default: // conexión lenta: se pierde este mensaje, el próximo trae el estado completo
+	}
+}
+
+type Session struct {
+	mu       sync.Mutex
+	Code     string
+	Kind     string // sala | clase
+	HostKey  string
+	Dur      float64
+	Diff     string
+	TeamSize int
+	Phase    Phase
+	Players  map[string]*Player
+	Teams    []*Team
+	clients  map[*Client]bool
+	cfg      *Config
+	store    *Store
+	count    float64
+	tick     int
+	created  time.Time
+	lastSeen time.Time
+	hostID   string
+	done     chan struct{}
+	results  []map[string]any
+}
+
+type Hub struct {
+	mu       sync.Mutex
+	sessions map[string]*Session
+	cfg      *Config
+	store    *Store
+}
+
+func newHub(cfg *Config, store *Store) *Hub {
+	return &Hub{sessions: map[string]*Session{}, cfg: cfg, store: store}
+}
+
+func randToken(n int) string {
+	b := make([]byte, n)
+	if _, err := rand.Read(b); err != nil {
+		panic(err)
+	}
+	return hex.EncodeToString(b)
+}
+
+const codeAlphabet = "ABCDEFGHJKMNPQRSTUVWXYZ"
+
+func (h *Hub) create(kind string, dur float64, diff string, teamSize int) *Session {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if len(h.sessions) >= maxSessions {
+		return nil
+	}
+	var code string
+	for {
+		var b [4]byte
+		for i := range b {
+			b[i] = codeAlphabet[mrand.Intn(len(codeAlphabet))]
+		}
+		code = string(b[:])
+		if _, used := h.sessions[code]; !used {
+			break
+		}
+	}
+	s := &Session{Code: code, Kind: kind, HostKey: randToken(16), Dur: dur, Diff: diff, TeamSize: teamSize, Phase: PhaseLobby,
+		Players: map[string]*Player{}, clients: map[*Client]bool{}, cfg: h.cfg, store: h.store,
+		created: time.Now(), lastSeen: time.Now(), done: make(chan struct{})}
+	s.Teams = []*Team{{Index: 0, Name: "Equipo 1"}}
+	h.sessions[code] = s
+	go s.loop(func() {
+		h.mu.Lock()
+		delete(h.sessions, code)
+		h.mu.Unlock()
+	})
+	return s
+}
+
+func (h *Hub) get(code string) *Session {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.sessions[strings.ToUpper(code)]
+}
+
+func (h *Hub) stats() map[string]any {
+	h.mu.Lock()
+	list := make([]*Session, 0, len(h.sessions))
+	for _, s := range h.sessions {
+		list = append(list, s)
+	}
+	h.mu.Unlock()
+	players, playing := 0, 0
+	for _, s := range list {
+		s.mu.Lock()
+		players += len(s.Players)
+		if s.Phase == PhasePlay {
+			playing++
+		}
+		s.mu.Unlock()
+	}
+	return map[string]any{"salas": len(list), "jugando": playing, "jugadores": players}
+}
+
+func diffValue(d string) float64 {
+	switch d {
+	case "facil":
+		return 1.3
+	case "dificil":
+		return .8
+	}
+	return 1
+}
+
+func cleanName(n string) string {
+	n = strings.Join(strings.Fields(n), " ")
+	var b strings.Builder
+	count := 0
+	for _, r := range n {
+		if r < 0x20 || r == 0x7f {
+			continue
+		}
+		if count == 18 {
+			break
+		}
+		b.WriteRune(r)
+		count++
+	}
+	if !utf8.ValidString(b.String()) {
+		return ""
+	}
+	return b.String()
+}
+
+/* ---------- Bucle ---------- */
+
+func (s *Session) loop(onExit func()) {
+	defer onExit()
+	t := time.NewTicker(tickRate)
+	defer t.Stop()
+	dt := tickRate.Seconds()
+	for range t.C {
+		s.mu.Lock()
+		s.tick++
+		switch s.Phase {
+		case PhaseCountdown:
+			s.count -= dt
+			if s.count <= 0 {
+				s.Phase = PhasePlay
+				s.broadcastLobby()
+			}
+		case PhasePlay:
+			allDone := true
+			for _, tm := range s.Teams {
+				if tm.sim != nil && !tm.sim.Done() {
+					s.syncHumans(tm)
+					tm.sim.Step(dt)
+				}
+				if tm.sim != nil && !tm.sim.Done() {
+					allDone = false
+				}
+			}
+			if allDone {
+				s.finish()
+			}
+		}
+		if s.Phase == PhasePlay || s.Phase == PhasePaused || s.Phase == PhaseCountdown {
+			if s.tick%2 == 0 {
+				s.broadcastSnapshots()
+			}
+			if s.tick%10 == 0 {
+				s.broadcastDash()
+			}
+		}
+		expired := time.Since(s.created) > sessionMaxAge
+		if len(s.clients) > 0 {
+			s.lastSeen = time.Now()
+		} else if time.Since(s.lastSeen) > sessionIdle {
+			expired = true
+		}
+		s.mu.Unlock()
+		if expired {
+			return
+		}
+	}
+}
+
+// Un rol lo cubre un bot si quien lo tenía se desconectó.
+func (s *Session) syncHumans(tm *Team) {
+	h := tm.sim.Human
+	for _, r := range allRoles {
+		h[r] = false
+	}
+	for _, p := range s.Players {
+		if p.Team == tm.Index && p.conn != nil && p.Role != "" {
+			h[p.Role] = true
+		}
+	}
+}
+
+/* ---------- Mensajes de salida ---------- */
+
+func encode(v any) []byte {
+	b, err := json.Marshal(v)
+	if err != nil {
+		log.Printf("json: %v", err)
+		return []byte("{}")
+	}
+	return b
+}
+
+func (s *Session) lobbyMsg() map[string]any {
+	players := make([]*Player, 0, len(s.Players))
+	for _, p := range s.Players {
+		players = append(players, p)
+	}
+	sort.Slice(players, func(i, j int) bool { return players[i].ID < players[j].ID })
+	rows := make([]map[string]any, 0, len(players))
+	for _, p := range players {
+		rows = append(rows, map[string]any{"id": p.ID, "name": p.Name, "team": p.Team, "role": p.Role, "online": p.conn != nil})
+	}
+	return map[string]any{"t": "lobby", "code": s.Code, "kind": s.Kind, "phase": s.Phase, "dur": s.Dur, "diff": s.Diff, "teamSize": s.TeamSize,
+		"players": rows, "teams": s.Teams, "host": s.hostID, "count": s.count}
+}
+
+func (s *Session) broadcastLobby() {
+	b := encode(s.lobbyMsg())
+	for c := range s.clients {
+		c.push(b)
+	}
+}
+
+func (tm *Team) snapshot(s *Session) map[string]any {
+	sm := tm.sim
+	hs := make([]int, len(sm.Houses))
+	dl := make([]float64, len(sm.Houses))
+	for i := range sm.Houses {
+		hs[i] = sm.Houses[i].State
+		if st := sm.Houses[i].State; st == houseWants || st == houseLeaving {
+			dl[i] = math.Round((sm.Houses[i].Deadline-sm.T)*10) / 10
+		}
+	}
+	return map[string]any{"t": "s", "phase": s.Phase, "count": s.count, "T": math.Round(sm.T*100) / 100, "D": sm.Dur, "score": math.Round(sm.Score), "sync": math.Round(sm.Sync*100) / 100,
+		"links": sm.Links, "bat": math.Round(sm.Battery*10) / 10, "flow": sm.Flow, "heat": math.Round(sm.Heat), "dem": math.Round(sm.Demand*100) / 100, "sup": math.Round(sm.Supply*100) / 100,
+		"pow": math.Round(sm.Power*100) / 100, "mill": sm.Mill, "combo": sm.Combo, "h": hs, "dl": dl, "d": sm.Dists, "g": sm.Gusts, "st": sm.Storms, "human": sm.Human, "ev": sm.DrainEvents()}
+}
+
+func (s *Session) broadcastSnapshots() {
+	byTeam := map[int][]byte{}
+	for _, tm := range s.Teams {
+		if tm.sim == nil {
+			continue
+		}
+		byTeam[tm.Index] = encode(tm.snapshot(s))
+	}
+	for c := range s.clients {
+		team := c.watchTeam
+		if c.player != nil {
+			team = c.player.Team
+		}
+		if b, ok := byTeam[team]; ok {
+			c.push(b)
+		}
+	}
+}
+
+func (s *Session) broadcastDash() {
+	teams := make([]map[string]any, 0, len(s.Teams))
+	for _, tm := range s.Teams {
+		row := map[string]any{"i": tm.Index, "name": tm.Name}
+		if sm := tm.sim; sm != nil {
+			row["T"] = math.Round(sm.T)
+			row["D"] = sm.Dur
+			row["score"] = math.Round(sm.Score)
+			row["sync"] = math.Round(sm.Sync*100) / 100
+			row["links"] = sm.Links
+			row["bat"] = math.Round(sm.Battery)
+			row["pow"] = sm.Power
+			row["human"] = sm.Human
+		}
+		teams = append(teams, row)
+	}
+	b := encode(map[string]any{"t": "dash", "phase": s.Phase, "teams": teams})
+	for c := range s.clients {
+		if c.teacher {
+			c.push(b)
+		}
+	}
+}
+
+/* ---------- Armado de equipos ---------- */
+
+func (s *Session) autoTeams(n int) {
+	if n < 1 {
+		n = 1
+	}
+	if n > 20 {
+		n = 20
+	}
+	players := make([]*Player, 0, len(s.Players))
+	for _, p := range s.Players {
+		players = append(players, p)
+	}
+	mrand.Shuffle(len(players), func(i, j int) { players[i], players[j] = players[j], players[i] })
+	s.Teams = s.Teams[:0]
+	for i := 0; i < n; i++ {
+		s.Teams = append(s.Teams, &Team{Index: i, Name: "Equipo " + strconv.Itoa(i+1)})
+	}
+	counters := make([]int, n)
+	for i, p := range players {
+		t := i % n
+		p.Team = t
+		p.Role = allRoles[counters[t]%len(allRoles)]
+		counters[t]++
+	}
+}
+
+func (s *Session) start() {
+	seed := time.Now().UnixNano()
+	dv := diffValue(s.Diff)
+	for _, tm := range s.Teams {
+		tm.sim = newSim(s.cfg, s.Dur, dv, seed+int64(tm.Index)*97)
+		s.syncHumans(tm)
+	}
+	s.results = nil
+	s.Phase = PhaseCountdown
+	s.count = 3.2
+	s.broadcastLobby()
+}
+
+func (s *Session) finish() {
+	s.Phase = PhaseEnd
+	results := make([]map[string]any, 0, len(s.Teams))
+	for _, tm := range s.Teams {
+		if tm.sim == nil {
+			continue
+		}
+		sm := tm.sim
+		members := []map[string]any{}
+		for _, p := range s.Players {
+			if p.Team == tm.Index {
+				members = append(members, map[string]any{"name": p.Name, "role": p.Role})
+			}
+		}
+		results = append(results, map[string]any{"i": tm.Index, "name": tm.Name, "score": math.Round(sm.Score), "links": sm.Links, "stats": sm.Stats, "timeline": sm.Timeline, "members": members, "humans": len(members)})
+	}
+	sort.Slice(results, func(i, j int) bool { return results[i]["score"].(float64) > results[j]["score"].(float64) })
+	s.results = results
+	b := encode(map[string]any{"t": "end", "results": results, "code": s.Code, "kind": s.Kind})
+	for c := range s.clients {
+		c.push(b)
+	}
+	s.broadcastLobby()
+	if s.store != nil {
+		code, kind, diff, dur := s.Code, s.Kind, s.Diff, s.Dur
+		rows := results
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			for _, r := range rows {
+				if r["humans"].(int) == 0 {
+					continue
+				}
+				if err := s.store.saveTeam(ctx, code, kind, diff, dur, r); err != nil {
+					log.Printf("guardar equipo: %v", err)
+				}
+			}
+		}()
+	}
+}
+
+/* ---------- Mensajes de entrada ---------- */
+
+type inMsg struct {
+	T      string  `json:"t"`
+	A      float64 `json:"a"`
+	V      float64 `json:"v"`
+	ID     int     `json:"id"`
+	I      int     `json:"i"`
+	D      int     `json:"d"`
+	On     bool    `json:"on"`
+	N      int     `json:"n"`
+	Role   Role    `json:"role"`
+	Player string  `json:"player"`
+	Team   int     `json:"team"`
+	Dur    float64 `json:"dur"`
+	Diff   string  `json:"diff"`
+	K      string  `json:"k"`
+}
+
+var sayKeys = map[string]bool{"storm": true, "wind": true, "mark": true, "thanks": true, "off": true, "more": true, "less": true}
+
+func validRole(r Role) bool {
+	for _, x := range allRoles {
+		if x == r {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Session) handle(c *Client, raw []byte) {
+	var m inMsg
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	isHost := c.teacher || (c.player != nil && s.Kind == "sala" && c.player.ID == s.hostID)
+
+	switch m.T {
+	case "role": // en una sala cada quien elige su rol
+		if c.player != nil && s.Kind == "sala" && s.Phase != PhasePlay && s.Phase != PhaseCountdown && validRole(m.Role) {
+			if m.Role == RoleMolino {
+				for _, p := range s.Players {
+					if p != c.player && p.Team == c.player.Team && p.Role == RoleMolino {
+						p.Role = ""
+					}
+				}
+			}
+			c.player.Role = m.Role
+			s.broadcastLobby()
+		}
+		return
+	case "start":
+		if isHost && (s.Phase == PhaseLobby || s.Phase == PhaseEnd) && len(s.Players) > 0 {
+			s.start()
+		}
+		return
+	case "cfg":
+		if isHost && (s.Phase == PhaseLobby || s.Phase == PhaseEnd) {
+			if m.Dur >= 60 && m.Dur <= 600 {
+				s.Dur = m.Dur
+			}
+			if m.Diff == "facil" || m.Diff == "normal" || m.Diff == "dificil" {
+				s.Diff = m.Diff
+			}
+			s.broadcastLobby()
+		}
+		return
+	case "teams":
+		if c.teacher && (s.Phase == PhaseLobby || s.Phase == PhaseEnd) {
+			s.autoTeams(m.N)
+			s.broadcastLobby()
+		}
+		return
+	case "assign":
+		if c.teacher && s.Phase != PhasePlay && s.Phase != PhaseCountdown {
+			if p := s.Players[m.Player]; p != nil && m.Team >= 0 && m.Team < len(s.Teams) {
+				p.Team = m.Team
+				if validRole(m.Role) {
+					p.Role = m.Role
+				}
+				s.broadcastLobby()
+			}
+		}
+		return
+	case "kick":
+		if c.teacher {
+			if p := s.Players[m.Player]; p != nil {
+				delete(s.Players, m.Player)
+				if p.conn != nil {
+					p.conn.push(encode(map[string]string{"t": "kicked"}))
+				}
+				s.broadcastLobby()
+			}
+		}
+		return
+	case "pause":
+		if isHost && s.Phase == PhasePlay {
+			s.Phase = PhasePaused
+			s.broadcastLobby()
+		}
+		return
+	case "resume":
+		if isHost && s.Phase == PhasePaused {
+			s.Phase = PhasePlay
+			s.broadcastLobby()
+		}
+		return
+	case "finish":
+		if isHost && (s.Phase == PhasePlay || s.Phase == PhasePaused) {
+			s.finish()
+		}
+		return
+	case "again":
+		if isHost && s.Phase == PhaseEnd {
+			s.Phase = PhaseLobby
+			for _, tm := range s.Teams {
+				tm.sim = nil
+			}
+			s.broadcastLobby()
+		}
+		return
+	}
+
+	// Comandos de juego: solo durante la partida y según el rol
+	if c.player == nil || s.Phase != PhasePlay {
+		return
+	}
+	if c.player.Team >= len(s.Teams) || s.Teams[c.player.Team].sim == nil {
+		return
+	}
+	sm := s.Teams[c.player.Team].sim
+	r := c.player.Role
+	switch m.T {
+	case "mill":
+		if r == RoleMolino {
+			sm.CmdMill(m.A)
+		}
+	case "ping":
+		if r == RoleVigia {
+			sm.CmdPing(m.ID)
+		}
+	case "warn":
+		if r == RoleVigia {
+			sm.CmdWarn(m.ID)
+		}
+	case "flow":
+		if r == RoleRed {
+			sm.CmdFlow(m.V)
+		}
+	case "protect":
+		if r == RoleRed {
+			sm.CmdProtect(m.ID)
+		}
+	case "reset":
+		if r == RoleRed {
+			sm.CmdReset(m.D)
+		}
+	case "repair":
+		if r == RoleRed {
+			sm.CmdRepair(m.D, m.On)
+		}
+	case "house":
+		if r == RoleLuces {
+			sm.CmdHouse(m.I)
+		}
+	case "say":
+		if sayKeys[m.K] {
+			sm.emit(Event{"k": "say", "m": m.K, "r": r, "from": c.player.Name})
+		}
+	}
+}
+
+/* ---------- Altas y bajas ---------- */
+
+// attach conecta a un jugador; si trae un token conocido recupera su lugar.
+func (s *Session) attach(c *Client, name, token string) (*Player, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var p *Player
+	for _, x := range s.Players {
+		if token != "" && x.token == token {
+			p = x
+			break
+		}
+	}
+	if p == nil {
+		if len(s.Players) >= maxPerSession {
+			return nil, false
+		}
+		name = cleanName(name)
+		if name == "" {
+			return nil, false
+		}
+		p = &Player{ID: randToken(4), Name: name, token: randToken(12)}
+		s.Players[p.ID] = p
+		if s.Kind == "sala" {
+			if s.hostID == "" {
+				s.hostID = p.ID
+			}
+			taken := map[Role]bool{}
+			for _, x := range s.Players {
+				if x != p {
+					taken[x.Role] = true
+				}
+			}
+			for _, r := range []Role{RoleMolino, RoleLuces, RoleRed, RoleVigia} {
+				if !taken[r] {
+					p.Role = r
+					break
+				}
+			}
+			if p.Role == "" {
+				p.Role = RoleLuces
+			}
+		} else if len(s.Teams) > 0 {
+			// Hasta que el profe arme los equipos, todos esperan en el primero
+			count := 0
+			for _, x := range s.Players {
+				if x != p && x.Team == 0 {
+					count++
+				}
+			}
+			p.Team = 0
+			p.Role = allRoles[count%len(allRoles)]
+		}
+	}
+	if p.conn != nil {
+		p.conn.push(encode(map[string]string{"t": "replaced"}))
+		delete(s.clients, p.conn)
+	}
+	p.conn = c
+	c.player = p
+	s.clients[c] = true
+	c.push(encode(map[string]any{"t": "hello", "id": p.ID, "token": p.token, "name": p.Name}))
+	c.push(encode(s.lobbyMsg()))
+	if s.Phase == PhaseEnd && s.results != nil {
+		c.push(encode(map[string]any{"t": "end", "results": s.results, "code": s.Code, "kind": s.Kind}))
+	}
+	s.broadcastLobby()
+	return p, true
+}
+
+func (s *Session) attachWatcher(c *Client) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.clients[c] = true
+	c.push(encode(s.lobbyMsg()))
+	if s.Phase == PhaseEnd && s.results != nil {
+		c.push(encode(map[string]any{"t": "end", "results": s.results, "code": s.Code, "kind": s.Kind}))
+	}
+}
+
+func (s *Session) detach(c *Client) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.clients, c)
+	if c.player != nil && c.player.conn == c {
+		c.player.conn = nil
+		s.broadcastLobby()
+	}
+}

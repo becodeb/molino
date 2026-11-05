@@ -1,343 +1,10 @@
-<!doctype html>
-<html lang="es">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Desafío del Molino</title>
-<meta name="description" content="Orientá un molino con las manos, atrapá el viento y encendé un pueblo entero antes de que caiga la noche.">
-<meta name="theme-color" content="#10303a">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%2310303a'/%3E%3Cg fill='%23fff1d0'%3E%3Cpath d='M32 32 26 8h12z'/%3E%3Cpath d='M32 32 26 56h12z'/%3E%3Cpath d='M32 32 8 26v12z'/%3E%3Cpath d='M32 32 56 26v12z'/%3E%3C/g%3E%3Ccircle cx='32' cy='32' r='6' fill='%23e8513f'/%3E%3C/svg%3E">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&family=Fraunces:ital,opsz,wght,SOFT@0,9..144,500..900,100;1,9..144,400..700,100&display=swap" rel="stylesheet">
-<style>
-:root{
-  --ink:#0f2a33; --ink-2:#163a45; --cream:#fff4d9; --cream-2:#f4e3bd; --muted:#a9c2bf;
-  --gold:#ffc857; --coral:#ff6f59; --mint:#6fe3b0; --sky:#7fd8e8; --tulip:#ff8fab;
-  --panel:rgba(13,37,45,.8); --line:rgba(255,244,217,.14);
-  --display:'Fraunces',Georgia,'Times New Roman',serif; --body:'Figtree',system-ui,-apple-system,'Segoe UI',sans-serif;
-  --eff:#6fe3b0;
-}
-*{box-sizing:border-box;margin:0}
-html,body{height:100%;background:#0f4f78;overflow:hidden;color:var(--cream);font-family:var(--body);-webkit-font-smoothing:antialiased}
-#world{position:fixed;inset:0;width:100%;height:100%;display:block}
-button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
-button:focus-visible{outline:3px solid var(--gold);outline-offset:3px}
 
-/* ---------- Paneles ---------- */
-.panel{background:var(--panel);border:1px solid var(--line);border-radius:24px;box-shadow:0 18px 50px -18px rgba(3,18,26,.75),inset 0 1px 0 rgba(255,255,255,.06)}
-.hud{position:fixed;top:20px;bottom:20px;width:clamp(240px,21vw,300px);display:flex;flex-direction:column;gap:12px;z-index:5;transition:transform .9s cubic-bezier(.2,.9,.2,1),opacity .6s;pointer-events:none}
-.hud>*{pointer-events:auto}
-#hudL{left:20px}#hudR{right:20px}
-body:not(.in-game) #hudL{transform:translateX(-120%);opacity:0}
-body:not(.in-game) #hudR{transform:translateX(120%);opacity:0}
-
-.brand{display:flex;align-items:center;gap:10px;padding:4px 8px}
-.brand svg{width:32px;height:32px;flex:none;animation:spin 9s linear infinite}
-.brand b{font-family:var(--display);font-weight:700;font-size:18px;line-height:1.02;letter-spacing:-.01em;text-shadow:0 2px 12px rgba(5,30,40,.7)}
-.label{font-size:11px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:var(--muted)}
-
-.score-card{padding:15px 18px 14px;position:relative;overflow:hidden}
-#score{display:block;font-family:var(--display);font-weight:800;font-size:clamp(38px,3.5vw,50px);line-height:1.04;letter-spacing:-.025em;font-feature-settings:"lnum","tnum";margin-top:2px;transform-origin:left center}
-#score.bump{animation:bump .42s cubic-bezier(.2,1.6,.4,1)}
-#combo{position:absolute;right:14px;top:14px;padding:5px 10px;border-radius:99px;background:var(--gold);color:#4b2c00;font-weight:800;font-size:14px;font-feature-settings:"tnum";transform:scale(0) rotate(-14deg);transition:transform .32s cubic-bezier(.3,1.8,.4,1)}
-#combo.show{transform:scale(1) rotate(-4deg)}
-
-.time-card{padding:13px 16px 12px;text-align:center}
-.time-card .label{display:block;text-align:left;margin-bottom:2px}
-.dial{position:relative;width:100%;max-width:210px;margin:0 auto;display:block}
-.dial svg{display:block;width:100%;overflow:visible}
-#timeText{position:absolute;left:0;right:0;bottom:-3px;font-family:var(--display);font-weight:800;font-size:clamp(28px,2.6vw,36px);font-feature-settings:"lnum","tnum";line-height:1}
-.time-card.urgent #timeText{color:var(--coral);animation:pulse 1s infinite}
-
-.eff-card{padding:14px 18px 16px}
-.eff-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:9px}
-#effText{font-family:var(--display);font-weight:800;font-size:27px;line-height:1;color:var(--eff);font-feature-settings:"lnum","tnum";transition:color .5s}
-.bar{position:relative;height:20px;border-radius:99px;background:rgba(0,0,0,.34);overflow:hidden;box-shadow:inset 0 2px 5px rgba(0,0,0,.5)}
-.bar i{position:absolute;inset:0 auto 0 0;border-radius:99px;display:block}
-#effGhost{background:rgba(255,244,217,.55);transition:width 1s .3s cubic-bezier(.2,.8,.2,1)}
-#effFill{background:var(--eff);transition:width .42s cubic-bezier(.2,1.1,.3,1),background-color .5s;overflow:hidden}
-#effFill::after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(115deg,rgba(255,255,255,.26) 0 10px,rgba(255,255,255,0) 10px 26px);animation:flow 1.1s linear infinite}
-#effFill::before{content:"";position:absolute;left:0;right:0;top:2px;height:5px;background:rgba(255,255,255,.42);border-radius:9px}
-.eff-card.hit .bar{animation:barhit .4s}
-.eff-card.miss .bar{animation:shake .4s}
-.ticks{display:flex;justify-content:space-between;margin-top:6px;font-size:11px;font-weight:600;color:var(--muted)}
-#homes{margin-top:9px;font-size:13.5px;font-weight:600;color:var(--cream-2);display:flex;gap:7px;align-items:center}
-#homes svg{width:16px;height:16px;flex:none;fill:var(--gold)}
-
-.hud-actions{margin-top:auto;display:flex;gap:8px}
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:9px;min-height:46px;padding:0 20px;border-radius:15px;font-weight:700;font-size:15.5px;transition:transform .18s cubic-bezier(.3,1.6,.5,1),box-shadow .2s,background .2s}
-.btn:hover{transform:translateY(-2px)}.btn:active{transform:translateY(1px) scale(.98)}
-.btn.primary{background:var(--gold);color:#3f2500;box-shadow:0 5px 0 #c98b1d,0 14px 28px -10px rgba(255,180,50,.75)}
-.btn.primary:hover{box-shadow:0 7px 0 #c98b1d,0 20px 30px -10px rgba(255,180,50,.85)}
-.btn.primary:active{box-shadow:0 2px 0 #c98b1d}
-.btn.primary[disabled]{cursor:progress;filter:saturate(.75);transform:none}
-.btn.ghost{background:rgba(255,244,217,.09);border:1px solid rgba(255,244,217,.25)}
-.btn.ghost:hover{background:rgba(255,244,217,.16)}
-#btnRestart{flex:1;padding:0 10px}
-#btnSound{width:46px;padding:0;flex:none}
-#btnSound svg{width:21px;height:21px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-#btnSound.off .w{display:none}#btnSound:not(.off) .x{display:none}
-
-/* ---------- Cámara ---------- */
-.cam{position:relative;aspect-ratio:4/3;border-radius:22px;overflow:hidden;background:#0a2028;border:3px solid rgba(255,244,217,.2);box-shadow:0 18px 44px -16px rgba(0,15,22,.85);transition:border-color .22s,box-shadow .22s;flex:none}
-.cam video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);filter:saturate(.9) contrast(1.03)}
-.cam canvas{position:absolute;inset:0;width:100%;height:100%}
-.cam::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(6,28,36,.1),rgba(6,28,36,.42));pointer-events:none}
-.cam[data-g=left],.cam[data-g=right]{border-color:var(--sky);box-shadow:0 0 34px -4px var(--sky)}
-.cam[data-g=open]{border-color:var(--mint);box-shadow:0 0 34px -4px var(--mint)}
-.cam[data-g=fist]{border-color:var(--coral);box-shadow:0 0 34px -4px var(--coral)}
-#camMsg{position:absolute;inset:0;z-index:2;display:flex;align-items:center;justify-content:center;text-align:center;padding:14px;font-size:14px;font-weight:600;line-height:1.3;color:var(--cream-2)}
-.readout{padding:13px 16px;display:flex;flex-direction:column;gap:9px}
-#gestureNow{display:flex;align-items:center;gap:10px;min-height:42px;font-family:var(--display);font-weight:800;font-size:clamp(19px,1.75vw,24px);line-height:1.05;letter-spacing:-.01em}
-#gestureNow .e{font-size:1.25em;display:inline-block}
-#gestureNow.pop .e{animation:pop .4s cubic-bezier(.3,1.9,.4,1)}
-#gestureNow.dim{color:var(--muted);font-family:var(--body);font-weight:600;font-size:15px;letter-spacing:0}
-.chips{display:grid;grid-template-columns:1fr 1fr;gap:7px}
-.chip{position:relative;display:flex;align-items:center;gap:7px;padding:7px 9px;border-radius:12px;background:rgba(255,244,217,.07);border:1.5px solid transparent;font-size:12px;font-weight:700;letter-spacing:.02em;color:var(--cream-2);transition:background .15s,border-color .15s,transform .2s cubic-bezier(.3,1.7,.5,1),color .15s}
-.chip svg{width:25px;height:25px;flex:none;color:var(--cream)}
-.chip.on{transform:scale(1.04);color:#fff}
-.chip[data-g=left].on,.chip[data-g=right].on{background:rgba(127,216,232,.25);border-color:var(--sky)}
-.chip[data-g=open].on{background:rgba(111,227,176,.24);border-color:var(--mint)}
-.chip[data-g=fist].on{background:rgba(255,111,89,.26);border-color:var(--coral)}
-.chip .ok{position:absolute;right:-5px;top:-6px;width:19px;height:19px;border-radius:50%;background:var(--mint);color:#07382a;font-size:12px;font-weight:900;line-height:19px;text-align:center;transform:scale(0);transition:transform .3s cubic-bezier(.3,2,.4,1)}
-body.practice .chip.done .ok{transform:scale(1)}
-.mill-state{display:flex;align-items:center;gap:11px;padding:11px 15px}
-#millIcon{width:38px;height:38px;flex:none}
-#millIcon .arrow{transition:transform .3s;transform-origin:19px 19px}
-#millStateText{font-weight:700;font-size:14.5px;line-height:1.15}
-.keys-hint{display:none;padding:10px 14px;font-size:12.5px;line-height:1.5;color:var(--cream-2)}
-.keys-hint kbd{font:700 11px/1 var(--body);background:rgba(255,244,217,.14);border-radius:5px;padding:2px 5px}
-body.keyboard .keys-hint{display:block}
-
-/* ---------- Portada ---------- */
-.overlay{position:fixed;inset:0;z-index:8;display:flex;align-items:center;pointer-events:none;transition:opacity .55s,visibility .55s}
-.overlay.hidden{opacity:0;visibility:hidden}
-.overlay .sheet{pointer-events:auto}
-#landing{padding:clamp(20px,4vw,64px);background:linear-gradient(95deg,rgba(7,36,48,.88) 0%,rgba(7,36,48,.72) 34%,rgba(7,36,48,0) 58%)}
-.land{width:min(590px,100%);max-height:100%;overflow:auto;scrollbar-width:none}
-.land::-webkit-scrollbar{display:none}
-h1{font-family:var(--display);font-weight:900;font-size:clamp(50px,7.4vw,102px);line-height:.9;letter-spacing:-.035em;margin-bottom:16px;text-shadow:0 5px 34px rgba(0,20,30,.55)}
-h1 .w{display:inline-block}
-h1 .l{display:inline-block;opacity:0;transform:translateY(.55em) rotate(7deg);animation:rise .85s cubic-bezier(.2,1.25,.35,1) forwards;animation-delay:calc(1s + var(--i)*38ms)}
-h1 em{font-style:italic;font-weight:500;color:var(--gold);font-size:.74em;padding:0 .04em}
-.lead{font-size:clamp(16px,1.35vw,19px);line-height:1.45;max-width:30em;color:#f3ead4;margin-bottom:20px;opacity:0;animation:fadeup .8s 1.65s forwards}
-.gestures{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin-bottom:22px;opacity:0;animation:fadeup .8s 1.85s forwards}
-.gcard{padding:12px 8px 11px;border-radius:17px;background:rgba(255,244,217,.09);border:1px solid rgba(255,244,217,.15);text-align:center;transition:transform .25s cubic-bezier(.3,1.6,.5,1),background .2s}
-.gcard:hover{transform:translateY(-4px) rotate(-1.5deg);background:rgba(255,244,217,.15)}
-.gcard svg{width:clamp(40px,4vw,54px);height:clamp(40px,4vw,54px);display:block;margin:0 auto 6px;animation:wave 2.8s ease-in-out infinite;transform-origin:50% 90%}
-.gcard:nth-child(2) svg{animation-delay:-.7s}.gcard:nth-child(3) svg{animation-delay:-1.4s}.gcard:nth-child(4) svg{animation-delay:-2.1s}
-.gcard b{display:block;font-size:13px;font-weight:800;line-height:1.1}
-.gcard small{display:block;font-size:11.5px;line-height:1.2;color:var(--muted);margin-top:3px}
-.cta{display:flex;flex-wrap:wrap;gap:12px 12px;align-items:center;opacity:0;animation:fadeup .8s 2.05s forwards}
-#btnCam{min-height:56px;font-size:17.5px;padding:0 26px;border-radius:18px}
-.spinner{width:20px;height:20px;animation:spin .9s linear infinite;flex:none}
-.fine{margin-top:13px;font-size:13px;color:var(--muted);opacity:0;animation:fadeup .8s 2.25s forwards}
-#err{margin-top:12px;padding:10px 13px;border-radius:12px;background:rgba(255,111,89,.2);border:1px solid rgba(255,111,89,.55);font-size:14px;line-height:1.35;display:none}
-#err.show{display:block}
-
-/* ---------- Práctica ---------- */
-#practice{justify-content:center;align-items:flex-end;padding:0 0 22px}
-.prac{padding:13px 15px 13px 22px;display:flex;align-items:center;gap:18px;max-width:min(560px,calc(100vw - 24px));animation:fadeup .6s}
-.prac p{font-size:14.5px;line-height:1.28;font-weight:500}.prac p b{display:block;font-family:var(--display);font-weight:800;font-size:19px;margin-bottom:2px}
-#btnGo{flex:none}
-
-/* ---------- Cuenta regresiva ---------- */
-#count{position:fixed;inset:0;z-index:7;display:flex;align-items:center;justify-content:center;pointer-events:none;font-family:var(--display);font-weight:900;font-size:clamp(100px,17vw,230px);color:#fff;text-shadow:0 8px 0 rgba(10,50,60,.45),0 24px 60px rgba(0,20,30,.6);letter-spacing:-.03em}
-#count span{display:block;animation:countpop .92s cubic-bezier(.15,1.2,.3,1) both}
-#count span.go{font-size:.58em;color:var(--gold)}
-
-/* ---------- Final ---------- */
-#end{padding:clamp(20px,4vw,64px);background:linear-gradient(95deg,rgba(5,16,40,.82) 0%,rgba(5,16,40,.55) 34%,rgba(5,16,40,0) 58%)}
-.end-card{width:min(470px,100%);max-height:100%;overflow:auto;scrollbar-width:none}
-#endKicker{color:var(--gold);font-weight:800;letter-spacing:.11em;font-size:13px;text-transform:uppercase;margin-bottom:8px}
-#endTitle{font-family:var(--display);font-weight:900;font-size:clamp(44px,5.6vw,76px);line-height:.94;letter-spacing:-.03em;margin-bottom:12px;text-shadow:0 5px 30px rgba(0,10,30,.7)}
-#endText{font-size:17px;line-height:1.4;color:#efe6d3;margin-bottom:20px}
-#endScore{font-family:var(--display);font-weight:900;font-size:clamp(58px,7vw,88px);line-height:1;letter-spacing:-.03em;color:var(--gold);font-feature-settings:"lnum","tnum"}
-#endRecord{display:inline-block;min-height:24px;margin:4px 0 18px;font-weight:700;font-size:14.5px;color:var(--cream-2)}
-.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:22px}
-.stat{padding:11px 8px;border-radius:15px;background:rgba(255,244,217,.09);border:1px solid rgba(255,244,217,.15);text-align:center}
-.stat b{display:block;font-family:var(--display);font-weight:800;font-size:24px;line-height:1.05;font-feature-settings:"lnum","tnum"}
-.stat small{display:block;font-size:11.5px;line-height:1.15;color:var(--muted);margin-top:3px}
-#end.show .rev{animation:fadeup .7s both;animation-delay:calc(var(--d)*130ms + .25s)}
-#end{justify-content:space-between;gap:24px;align-items:center}
-.board{width:clamp(280px,25vw,350px);max-height:calc(100vh - 40px);overflow:auto;padding:18px 18px 14px;flex:none;scrollbar-width:none}
-.board h3{font-family:var(--display);font-weight:800;font-size:25px;line-height:1.05;letter-spacing:-.01em;margin-bottom:13px}
-#saveForm .label{display:block;margin-bottom:6px}
-#saveForm[hidden]{display:none}
-.save-row{display:flex;gap:8px}
-#playerName{flex:1;min-width:0;height:46px;padding:0 13px;border-radius:13px;border:1.5px solid rgba(255,244,217,.28);background:rgba(0,0,0,.25);color:var(--cream);font:600 16px var(--body)}
-#playerName::placeholder{color:var(--muted)}
-#playerName:focus{outline:none;border-color:var(--gold)}
-#btnSave{padding:0 15px;flex:none;box-shadow:0 4px 0 #c98b1d}
-#boardMsg{font-size:14px;font-weight:600;line-height:1.3;color:var(--cream-2);margin:9px 0}
-#boardMsg:empty{display:none}
-#boardList{list-style:none;padding:0;margin-top:11px;display:flex;flex-direction:column;gap:3px}
-#boardList li{display:grid;grid-template-columns:24px 1fr auto;gap:7px;align-items:baseline;padding:6px 8px;border-radius:10px;font-size:14.5px;font-weight:600}
-#boardList li:first-child{color:var(--gold)}
-#boardList li.me{background:rgba(255,200,87,.2);box-shadow:inset 0 0 0 1.5px var(--gold)}
-#boardList .n{font-feature-settings:"tnum";font-weight:800;color:var(--muted)}
-#boardList .who{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#boardList .pts{font-family:var(--display);font-weight:800;font-feature-settings:"lnum","tnum"}
-
-/* ---------- Alerta de eficiencia baja ---------- */
-#danger{position:fixed;inset:0;z-index:4;pointer-events:none;opacity:0;background:radial-gradient(ellipse at center,rgba(255,60,40,0) 56%,rgba(255,50,30,.42) 100%);transition:opacity .4s}
-body.danger #danger{opacity:1;animation:pulse 1s infinite}
-
-@keyframes spin{to{transform:rotate(360deg)}}
-@keyframes bump{0%{transform:scale(1)}40%{transform:scale(1.13)}100%{transform:scale(1)}}
-@keyframes pop{0%{transform:scale(.5) rotate(-18deg)}100%{transform:scale(1) rotate(0)}}
-@keyframes pulse{50%{opacity:.62}}
-@keyframes flow{to{background-position:56px 0}}
-@keyframes barhit{40%{transform:scaleY(1.28);filter:brightness(1.4)}}
-@keyframes shake{20%{transform:translateX(-6px)}45%{transform:translateX(6px)}70%{transform:translateX(-3px)}}
-@keyframes rise{to{opacity:1;transform:none}}
-@keyframes fadeup{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
-@keyframes wave{50%{transform:rotate(5deg) translateY(-2px)}}
-@keyframes countpop{0%{transform:scale(1.9);opacity:0}24%{transform:scale(1);opacity:1}76%{transform:scale(.96);opacity:1}100%{transform:scale(.55);opacity:0}}
-
-/* ---------- Pantallas angostas ---------- */
-@media (max-width:999px),(max-aspect-ratio:13/10){
-  .hud{position:fixed;width:auto;top:auto;bottom:auto;left:8px!important;right:8px!important}
-  #hudL{top:max(8px,env(safe-area-inset-top));display:grid;grid-template-columns:1fr 1fr;gap:6px}
-  #hudR{bottom:max(8px,env(safe-area-inset-bottom));display:grid;grid-template-columns:clamp(104px,31vw,170px) 1fr;gap:6px;align-items:stretch}
-  body:not(.in-game) #hudL{transform:translateY(-120%)}body:not(.in-game) #hudR{transform:translateY(120%)}
-  .brand{display:none}
-  .score-card{padding:7px 12px;border-radius:15px}#score{font-size:27px}#combo{right:8px;top:7px;font-size:12px;padding:3px 7px}
-  .time-card{padding:7px 12px;border-radius:15px;text-align:left;display:flex;align-items:center;justify-content:space-between}
-  .time-card .label{margin:0}.dial{max-width:none;width:auto}.dial svg{display:none}#timeText{position:static;font-size:27px}
-  .eff-card{grid-column:1/3;padding:7px 12px 9px;border-radius:15px;display:grid;grid-template-columns:auto 1fr;gap:0 12px;align-items:center}
-  .eff-head{display:contents}.eff-head .label{display:none}#effText{font-size:20px;grid-row:1}.bar{height:13px;grid-column:2;grid-row:1}.ticks,#homes{display:none}
-  .hud-actions{display:none}
-  .cam{aspect-ratio:auto;height:100%;min-height:92px;border-radius:15px;border-width:2px;grid-row:1/3}
-  .readout{padding:7px 9px;gap:5px;border-radius:15px}
-  #gestureNow{min-height:22px;font-size:15px;gap:6px}#gestureNow.dim{font-size:12px}
-  .chips{grid-template-columns:repeat(4,1fr);gap:4px}.chip{justify-content:center;padding:4px 2px;border-radius:9px}.chip span:not(.ok){display:none}.chip svg{width:21px;height:21px}
-  .mill-state{display:none}.keys-hint{display:none!important}
-  #landing{align-items:flex-end;padding:14px;background:linear-gradient(0deg,rgba(7,36,48,.95) 0%,rgba(7,36,48,.82) 62%,rgba(7,36,48,0) 90%)}
-  .land{max-height:74vh}h1{font-size:clamp(40px,12.5vw,76px);margin-bottom:9px}.lead{font-size:15px;margin-bottom:12px}
-  .gestures{gap:5px;margin-bottom:13px}.gcard{padding:8px 3px;border-radius:12px}.gcard svg{width:32px;height:32px;margin-bottom:3px}.gcard b{font-size:11px}.gcard small{display:none}
-  #btnCam{flex:1;min-height:50px;font-size:16px;padding:0 14px}.fine{font-size:12px;margin-top:9px}
-  #end{flex-direction:column;align-items:stretch;justify-content:flex-start;gap:14px;padding:max(24vh,110px) 14px 14px;overflow:auto;pointer-events:auto;background:linear-gradient(0deg,rgba(5,16,40,.96) 0%,rgba(5,16,40,.86) 70%,rgba(5,16,40,0) 100%)}
-  .end-card{width:100%;max-height:none;overflow:visible;flex:none}
-  .board{width:100%;max-height:none;flex:none}
-  #endTitle{font-size:clamp(36px,10vw,60px)}#endText{font-size:15px;margin-bottom:10px}#endScore{font-size:50px}#endRecord{margin-bottom:9px}.stats{margin-bottom:13px}.stat{padding:7px 4px}.stat b{font-size:18px}.stat small{font-size:10.5px}
-  #practice{align-items:center;padding:0 10px}.prac{gap:12px;padding:11px 11px 11px 15px}.prac p{font-size:13px}.prac p b{font-size:16px}
-}
-@media (max-height:760px) and (min-width:1000px){
-  .hud{gap:8px;top:12px;bottom:12px}.brand{display:none}
-  .score-card{padding:10px 15px}#score{font-size:36px}.time-card{padding:9px 14px}.dial{max-width:150px}#timeText{font-size:26px}
-  .eff-card{padding:10px 15px 11px}.ticks{display:none}#homes{margin-top:6px}
-  .readout{padding:9px 12px;gap:6px}#gestureNow{min-height:30px;font-size:18px}.chip{padding:4px 7px}.chip svg{width:21px;height:21px}
-  .mill-state{padding:7px 12px}#millIcon{width:30px;height:30px}
-  .cam{width:min(100%,230px);align-self:flex-end}
-  .gcard small{display:none}h1{font-size:clamp(46px,6.6vw,84px)}
-}
-@media (prefers-reduced-motion:reduce){
-  *,*::before,*::after{animation-duration:.01ms!important;animation-delay:0s!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
-}
-</style>
-</head>
-<body>
-<canvas id="world" role="img" aria-label="Isla vista desde arriba con un molino en el centro y ráfagas de viento que llegan desde la costa"></canvas>
-<div id="danger"></div>
-
-<section id="landing" class="overlay">
-  <div class="land sheet">
-    <h1 id="title" aria-label="Desafío del Molino"></h1>
-    <p class="lead">Noventa segundos, del amanecer a la noche. Girá el molino con las manos, atrapá cada ráfaga de frente y encendé todas las casas de la isla.</p>
-    <div class="gestures" id="guide"></div>
-    <div class="cta">
-      <button id="btnCam" class="btn primary">Encender cámara y jugar</button>
-      <button id="btnKeys" class="btn ghost">Jugar con teclado</button>
-    </div>
-    <div id="err" role="alert"></div>
-    <p class="fine">Tu imagen se analiza en este navegador y no se envía a ningún lado.</p>
-  </div>
-</section>
-
-<aside id="hudL" class="hud" aria-label="Estadísticas de la partida">
-  <div class="brand"><svg viewBox="0 0 64 64" aria-hidden="true"><g fill="#fff4d9"><path d="M32 32 26 6h12z"/><path d="M32 32 26 58h12z"/><path d="M32 32 6 26v12z"/><path d="M32 32 58 26v12z"/></g><circle cx="32" cy="32" r="6" fill="#ff6f59"/></svg><b>Desafío<br>del Molino</b></div>
-  <div class="panel score-card"><span class="label">Puntaje</span><span id="score">0</span><span id="combo"></span></div>
-  <div class="panel time-card" id="timeCard"><span class="label">Tiempo</span>
-    <div class="dial"><svg viewBox="0 0 170 92" aria-hidden="true">
-      <defs><linearGradient id="dayG" x1="0" x2="1"><stop offset="0" stop-color="#ffb08a"/><stop offset=".45" stop-color="#ffe58a"/><stop offset=".75" stop-color="#ff7f6b"/><stop offset="1" stop-color="#6d6fe0"/></linearGradient></defs>
-      <path d="M12 86A73 73 0 0 1 158 86" fill="none" stroke="rgba(255,244,217,.14)" stroke-width="7" stroke-linecap="round"/>
-      <path id="dayArc" d="M12 86A73 73 0 0 1 158 86" fill="none" stroke="url(#dayG)" stroke-width="7" stroke-linecap="round"/>
-      <circle id="sunHalo" r="14" fill="#ffd76a" opacity=".28"/><circle id="sunDot" r="8" fill="#ffd76a"/>
-    </svg><div id="timeText">1:30</div></div>
-  </div>
-  <div class="panel eff-card" id="effCard">
-    <div class="eff-head"><span class="label">Eficiencia</span><span id="effText">60%</span></div>
-    <div class="bar"><i id="effGhost" style="width:60%"></i><i id="effFill" style="width:60%"></i></div>
-    <div class="ticks"><span>0</span><span>50</span><span>100</span></div>
-    <div id="homes"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 12h3v9h5v-6h4v6h5v-9h3z"/></svg><span id="homesText"></span></div>
-  </div>
-  <div class="hud-actions">
-    <button id="btnRestart" class="btn ghost">Reiniciar partida</button>
-    <button id="btnSound" class="btn ghost" aria-label="Sonido"><svg viewBox="0 0 24 24"><path d="M4 9.5v5h4l5 4v-13l-5 4z" fill="currentColor"/><path class="w" d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/><path class="x" d="m16.5 9.5 5 5m0-5-5 5"/></svg></button>
-  </div>
-</aside>
-
-<aside id="hudR" class="hud" aria-label="Lectura de gestos">
-  <div class="cam" id="cam"><video id="vid" playsinline muted></video><canvas id="skel"></canvas><div id="camMsg">La cámara está apagada</div></div>
-  <div class="panel readout">
-    <div id="gestureNow" class="dim" aria-live="polite"><span>Mostrá una mano</span></div>
-    <div class="chips" id="chips"></div>
-  </div>
-  <div class="panel mill-state">
-    <svg id="millIcon" viewBox="0 0 38 38" aria-hidden="true"><circle cx="19" cy="19" r="16" fill="none" stroke="rgba(255,244,217,.2)" stroke-width="3"/><path id="millArc" fill="none" stroke="#6fe3b0" stroke-width="3.4" stroke-linecap="round"/><g id="millBlades"><path d="M19 19 16.6 7h4.8zM19 19 16.6 31h4.8zM19 19 7 16.6v4.8zM19 19 31 16.6v4.8z" fill="#fff4d9"/></g><circle cx="19" cy="19" r="2.6" fill="#ff6f59"/></svg>
-    <div><span class="label">Molino</span><div id="millStateText">Detenido</div></div>
-  </div>
-  <div class="panel keys-hint"><kbd>←</kbd> <kbd>→</kbd> dirección · <kbd>↑</kbd> avanzar · <kbd>↓</kbd> o <kbd>Espacio</kbd> detener</div>
-</aside>
-
-<section id="practice" class="overlay hidden">
-  <div class="panel prac sheet">
-    <p><b id="pracTitle">Probá tus gestos</b><span id="pracText">El molino ya te obedece. Practicá lo que quieras y arrancá cuando quieras.</span></p>
-    <button id="btnGo" class="btn primary">¡A jugar!</button>
-  </div>
-</section>
-
-<div id="count" aria-live="assertive"></div>
-
-<section id="end" class="overlay hidden">
-  <div class="end-card sheet">
-    <div id="endKicker" class="rev" style="--d:0"></div>
-    <h2 id="endTitle" class="rev" style="--d:1"></h2>
-    <p id="endText" class="rev" style="--d:2"></p>
-    <div id="endScore" class="rev" style="--d:3">0</div>
-    <div id="endRecord" class="rev" style="--d:3"></div>
-    <div class="stats rev" style="--d:4">
-      <div class="stat"><b id="stHits">0</b><small>ráfagas atrapadas</small></div>
-      <div class="stat"><b id="stAcc">0%</b><small>de puntería</small></div>
-      <div class="stat"><b id="stCombo">0</b><small>mejor racha</small></div>
-      <div class="stat"><b id="stAvg">0%</b><small>eficiencia media</small></div>
-    </div>
-    <button id="btnAgain" class="btn primary rev" style="--d:5">Jugar de nuevo</button>
-  </div>
-  <div class="panel board sheet rev" style="--d:6">
-    <h3>Ranking de la isla</h3>
-    <form id="saveForm" autocomplete="off">
-      <label class="label" for="playerName">Tu nombre</label>
-      <div class="save-row">
-        <input id="playerName" maxlength="18" placeholder="Cómo te llamás" enterkeyhint="done" required>
-        <button id="btnSave" class="btn primary" type="submit">Guardar</button>
-      </div>
-    </form>
-    <p id="boardMsg" role="status"></p>
-    <ol id="boardList"></ol>
-  </div>
-</section>
-
-<script>
 'use strict';
 /* =====================================================================
    Desafío del Molino
    1. Utilidades        5. Generación del mundo    9. Render
    2. Audio             6. Sprites y pintura       10. Visión (MediaPipe)
-   3. Clasificador      7. Estado y reglas         11. Interfaz
+   3. Señas             7. Estado y reglas         11. Interfaz
    4. Layout y cámara   8. Actualización
    ===================================================================== */
 
@@ -416,60 +83,77 @@ const Snd = {
   boom(pan) { this.tone(rand(70, 110), 0, .45, 'sine', .1, pan); this.whoosh(pan, .55, .025, 2600, 500); }
 };
 
-/* ---------- 3. Clasificador geométrico de gestos ---------- */
-const FINGER_IDX = { index: [5, 6, 7, 8], middle: [9, 10, 11, 12], ring: [13, 14, 15, 16], pinky: [17, 18, 19, 20] };
-function classifyHand(lm, label) {
-  const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, (a.z || 0) - (b.z || 0));
-  const ang = (a, b, c) => {
-    const ux = a.x - b.x, uy = a.y - b.y, uz = (a.z || 0) - (b.z || 0), vx = c.x - b.x, vy = c.y - b.y, vz = (c.z || 0) - (b.z || 0);
-    const d = (Math.hypot(ux, uy, uz) * Math.hypot(vx, vy, vz)) || 1e-6;
-    return Math.acos(clamp((ux * vx + uy * vy + uz * vz) / d, -1, 1)) / DEG;
-  };
-  const w = lm[0], palm = dist(w, lm[9]) || 1e-6;
-  const finger = ([m, p, d, t]) => {
-    const pip = ang(lm[m], lm[p], lm[d]);
-    const reach = dist(w, lm[t]) / (dist(w, lm[p]) || 1e-6);
-    const ext = pip > 138 && reach > 1.1;
-    return { ext, cur: !ext && (pip < 128 || reach < 1.04), pip, reach };
-  };
-  const f = { index: finger(FINGER_IDX.index), middle: finger(FINGER_IDX.middle), ring: finger(FINGER_IDX.ring), pinky: finger(FINGER_IDX.pinky) };
-  const thumbIp = ang(lm[2], lm[3], lm[4]);
-  const toMiddle = dist(lm[4], lm[9]) / palm, toPinky = dist(lm[4], lm[17]) / palm;
-  const thumbExt = thumbIp > 128 && toMiddle > .72 && toPinky > 1;
-  const thumbTucked = toMiddle < .3; // solo cuenta como cerrado si cruza la palma; relajado sigue siendo mano abierta
-  const vT = { x: lm[4].x - lm[2].x, y: lm[4].y - lm[2].y, z: (lm[4].z || 0) - (lm[2].z || 0) };
-  const vI = { x: lm[8].x - lm[5].x, y: lm[8].y - lm[5].y, z: (lm[8].z || 0) - (lm[5].z || 0) };
-  const lAngle = ang({ x: vT.x, y: vT.y, z: vT.z }, { x: 0, y: 0, z: 0 }, { x: vI.x, y: vI.y, z: vI.z });
-  const list = [f.index, f.middle, f.ring, f.pinky];
-  const nExt = list.filter(x => x.ext).length, anyCur = list.some(x => x.cur);
-  const fourCur = list.every(x => x.cur);
-  const threeCur = f.middle.cur && f.ring.cur && f.pinky.cur;
-  let g = null;
-  if (nExt >= 3 && !anyCur && f.index.ext && f.middle.ext && !thumbTucked) g = 'open';
-  else if (fourCur && !thumbExt) g = 'fist';
-  else if (f.index.ext && threeCur && thumbExt && lAngle > 38 && lAngle < 132) g = label === 'Left' ? 'left' : 'right';
-  return { g, lAngle, thumbExt, f };
-}
-
+/* ---------- 3. Señas de cada jugador ---------- */
+/* Cada comando es una seña que el jugador inventa y graba. Reconocer es buscar la grabación
+   más parecida entre las hechas con esa misma mano; si nada se parece, no hay comando. */
+const SIGN_ORDER = ['left', 'right', 'open', 'fist'];
 const GESTURES = {
-  left: { e: '⬅️', t: 'IZQUIERDA', c: '#7fd8e8', s: 'Mano izquierda en L' },
-  right: { e: '➡️', t: 'DERECHA', c: '#7fd8e8', s: 'Mano derecha en L' },
-  open: { e: '🟢', t: 'AVANZAR', c: '#6fe3b0', s: 'Mano abierta' },
-  fist: { e: '🛑', t: 'DETENER', c: '#ff6f59', s: 'Puño cerrado' }
+  left: { e: '⬅️', t: 'IZQUIERDA', c: '#7fd8e8' },
+  right: { e: '➡️', t: 'DERECHA', c: '#7fd8e8' },
+  open: { e: '🟢', t: 'AVANZAR', c: '#6fe3b0' },
+  fist: { e: '🛑', t: 'DETENER', c: '#ff6f59' }
 };
-function handSVG(kind) {
-  const flip = kind === 'right' ? ' transform="translate(64 0) scale(-1 1)"' : '';
-  const bones = {
-    open: 'M22 36 18 17M29 32 27.5 9M36 32 37 7M43 34 46.5 11M46 44 59 33',
-    fist: 'M21 25v5M29 22v6M37 22v6M45 25v5',
-    left: 'M38 34 38 6M42 45 60 44',
-    right: 'M38 34 38 6M42 45 60 44'
-  }[kind];
-  const palm = kind === 'fist' ? '<rect x="15" y="25" width="36" height="31" rx="12"/><path d="M21 42 41 39" stroke="rgba(6,30,38,.55)" stroke-width="4.5" fill="none"/>'
-    : kind === 'open' ? '<rect x="17" y="31" width="31" height="27" rx="11"/>'
-    : '<rect x="15" y="30" width="30" height="27" rx="11"/><path d="M19 31v-3M26 30v-4M32 30v-4" stroke="currentColor" stroke-width="7.5"/>';
-  return `<svg viewBox="0 0 64 64" aria-hidden="true"><g${flip} fill="currentColor" stroke-linecap="round" stroke-linejoin="round">${palm}<path d="${bones}" stroke="currentColor" stroke-width="7.5" fill="none"/></g></svg>`;
-}
+const Signs = {
+  KEY: 'molino.signs.v1', data: {},
+  load() {
+    try {
+      const d = JSON.parse(localStorage.getItem(this.KEY) || '{}');
+      for (const k of SIGN_ORDER) if (d[k] && Array.isArray(d[k].samples) && d[k].samples.length) this.data[k] = d[k];
+    } catch (e) { /* almacenamiento bloqueado o dañado: se vuelven a grabar */ }
+  },
+  save() { try { localStorage.setItem(this.KEY, JSON.stringify(this.data)); } catch (e) { /* almacenamiento bloqueado: duran hasta cerrar la pestaña */ } },
+  has(k) { return !!this.data[k]; },
+  ready() { return SIGN_ORDER.every(k => this.has(k)); },
+  // Forma de la mano: cada punto respecto de la muñeca, en unidades de palma. Conserva la orientación,
+  // así apuntar a un lado o al otro pueden ser señas distintas.
+  vec(world) {
+    const w = world[0], palm = Math.hypot(w.x - world[9].x, w.y - world[9].y, (w.z || 0) - (world[9].z || 0)) || 1e-6, out = new Array(60);
+    for (let i = 1; i <= 20; i++) { const p = world[i], o = (i - 1) * 3; out[o] = (p.x - w.x) / palm; out[o + 1] = (p.y - w.y) / palm; out[o + 2] = ((p.z || 0) - (w.z || 0)) / palm; }
+    return out;
+  },
+  dist(u, v) {
+    let sum = 0;
+    for (let i = 0; i < 60; i += 3) sum += Math.hypot(u[i] - v[i], u[i + 1] - v[i + 1], u[i + 2] - v[i + 2]);
+    return sum / 20;
+  },
+  nearest(v, sign) { let best = Infinity; for (const s of sign.samples) { const d = this.dist(v, s); if (d < best) best = d; } return best; },
+  mean(list) { const m = new Array(60).fill(0); for (const v of list) for (let i = 0; i < 60; i++) m[i] += v[i] / list.length; return m; },
+  match(world, label) {
+    const v = this.vec(world); let best = null, bd = Infinity, second = Infinity;
+    for (const k of SIGN_ORDER) {
+      const s = this.data[k]; if (!s || s.hand !== label) continue;
+      const d = this.nearest(v, s);
+      if (d < bd) { second = bd; bd = d; best = k; } else if (d < second) second = d;
+    }
+    if (!best || bd > this.data[best].th || bd > second * .72) return null;
+    return best;
+  },
+  // Guarda una seña salvo que se confunda con otra de la misma mano.
+  record(k, hand, frames, lm) {
+    const samples = frames.filter((_, i) => i % 2 === 0).map(v => v.map(n => Math.round(n * 1000) / 1000));
+    const center = this.mean(samples);
+    for (const other of SIGN_ORDER) {
+      if (other === k || !this.data[other] || this.data[other].hand !== hand) continue;
+      if (this.nearest(center, this.data[other]) < .3) return { ok: false, conflict: other };
+    }
+    const spread = samples.reduce((acc, s) => acc + this.dist(s, center), 0) / samples.length;
+    const xs = lm.map(p => p.x), ys = lm.map(p => p.y), x0 = Math.min(...xs), y0 = Math.min(...ys), size = Math.max(Math.max(...xs) - x0, Math.max(...ys) - y0) || 1;
+    const pose = lm.map(p => [Math.round(((p.x - x0) / size) * 52 + 6), Math.round(((p.y - y0) / size) * 52 + 6)]);
+    this.data[k] = { hand, samples, th: clamp(spread * 3.2, .24, .38), pose };
+    this.save();
+    return { ok: true };
+  },
+  // Dibujo de la seña tal como la hizo el jugador
+  thumb(k) {
+    const s = this.data[k];
+    if (!s) return '<svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="24" fill="none" stroke="currentColor" stroke-width="4" stroke-dasharray="5 7" opacity=".55"/><text x="32" y="42" text-anchor="middle" font-size="28" font-weight="800" fill="currentColor" opacity=".7">?</text></svg>';
+    const d = BONES.map(([a, b]) => `M${s.pose[a][0]} ${s.pose[a][1]}L${s.pose[b][0]} ${s.pose[b][1]}`).join('');
+    return `<svg viewBox="0 0 64 64" aria-hidden="true"><path d="${d}" fill="none" stroke="currentColor" stroke-width="4.5" stroke-linecap="round"/></svg>`;
+  },
+  refreshUI() {
+    document.querySelectorAll('[data-sign]').forEach(e => { e.innerHTML = this.thumb(e.dataset.sign); });
+  }
+};
 
 /* ---------- 4. Layout y cámara virtual ---------- */
 const cv = $('world'), ctx = cv.getContext('2d', { alpha: false });
@@ -501,6 +185,7 @@ function layout() {
   camTarget(true);
 }
 function camTarget(snap) {
+  if (Rules.cam) { const c = Rules.cam(); Cam.tx = c.x; Cam.ty = c.y; Cam.tz = c.z; if (snap) { Cam.x = c.x; Cam.y = c.y; Cam.z = c.z; } return; }
   if (G.mode === 'attract') { Cam.tx = V.lx; Cam.ty = V.ly; Cam.tz = V.lz; }
   else if (G.mode === 'end') { Cam.tx = V.ex; Cam.ty = V.ey; Cam.tz = V.ez; }
   else { Cam.tx = V.gx; Cam.ty = V.gy; Cam.tz = 1; }
@@ -836,10 +521,29 @@ function buildAll() {
   const maxZ = Math.max(1, V.lz, V.ez);
   V.S = Math.min(V.base * V.dpr * maxZ, 2300 / 1240);
   buildSprites(); paintGround();
-  const sk = $('skel'); sk.width = 640; sk.height = 480;
+  const sk = $('skel'); if (sk) { sk.width = 640; sk.height = 480; }
 }
 
 /* ---------- 7. Estado y reglas ---------- */
+/* Parámetros que el servidor permite ajustar en vivo desde /dev */
+const CFG = {};
+/* Cada modo de juego completa estos ganchos: el motor no conoce las reglas. */
+const Rules = {
+  day: null,          // (dt) avanza el tiempo y el cielo
+  tick: null,         // (dt) lógica propia del modo, antes de mover las ráfagas
+  resolve: null,      // (ráfaga) llegó al molino; en red se espera al servidor
+  houseWant: null,    // (casa, índice) debe estar encendida
+  ui: null,           // () actualiza el HUD en cada cuadro
+  cam: null,          // () devuelve {x, y, z} para la cámara
+  preGrade: null,     // () dibuja antes de aplicar el color del día
+  overlay: null,      // () dibuja encima de todo, en coordenadas de mundo
+  onHands: null,      // (lista de manos) recibe cada lectura de MediaPipe
+  trainer: null,      // (lista de manos) mientras se graban señas; devuelve true si se ocupó
+  netMill: false,     // el ángulo del molino viene de afuera
+  noMillControl: false, // los gestos no mueven el molino
+  hideRing: false,    // oculta el aro de puntería
+  noClouds: false     // sin nubes altas: el vigía necesita ver el mar
+};
 const GAME_SECS = 90, TOL = 25 * DEG, PERFECT = 9 * DEG, IMPACT = 112, SPAWN_R = 545;
 const G = {
   mode: 'attract', t: 0, score: 0, shown: 0, eff: 72, effAvgSum: 0, effAvgN: 0, combo: 0, best: 0, hits: 0, misses: 0, total: 0,
@@ -848,12 +552,7 @@ const G = {
 const M = { a: -.75, vel: 0, dir: 1, moving: false, spin: 0, omega: 2, jolt: 0, fan: 0, glow: 0 };
 const Hand = { seen: null, last: null, tried: new Set(), present: false, keyUntil: 0 };
 
-function resetRun() {
-  Object.assign(G, { t: 0, score: 0, shown: 0, eff: 60, effAvgSum: 0, effAvgN: 0, combo: 0, best: 0, hits: 0, misses: 0, total: 0, spawnIn: 1.1, firstGust: true, blackout: false });
-  G.gusts.length = 0; G.pulses.length = 0; G.pops.length = 0; G.rockets.length = 0;
-  M.moving = false; M.vel = 0;
-}
-const rotSpeed = () => lerp(125, 155, clamp(G.t / GAME_SECS)) * DEG;
+const rotSpeed = () => { const base = CFG['solo.giro'] || 125; return lerp(base, base * 1.24, clamp(G.t / GAME_SECS)) * DEG; };
 
 function makeGust(angle, travel, gold, demo) {
   const n = Q.ribbons + (gold ? 3 : 0), rbs = [], curls = [];
@@ -861,25 +560,6 @@ function makeGust(angle, travel, gold, demo) {
   for (let i = 0; i < 3; i++) curls.push({ off: rand(-.75, .75), lag: rand(.1, .95), s: rand(10, 20), ph: rand(TAU), d: Math.random() < .5 ? 1 : -1 });
   return { a: angle, dx: Math.cos(angle), dy: Math.sin(angle), nx: -Math.sin(angle), ny: Math.cos(angle), r: SPAWN_R, sp: (SPAWN_R - IMPACT) / travel, state: 'warn', warn: REDUCED ? .5 : .95, warnT: 0, t: 0, end: 0, rbs, curls, gold, demo, emit: 0 };
 }
-function spawnNext() {
-  const p = clamp(G.t / GAME_SECS);
-  // Un gesto tarda casi medio segundo entre que se hace y se lee: el ritmo final tiene que seguir siendo jugable
-  const gap = lerp(3.6, 1.7, Math.pow(p, 1.05));
-  const travel = lerp(5.4, 3, Math.pow(p, .85));
-  const maxD = Math.min(170 * DEG, gap * rotSpeed() * .62);
-  let angle;
-  if (G.firstGust) { angle = M.a + rand(45, 80) * DEG * (Math.random() < .5 ? -1 : 1); G.firstGust = false; }
-  else {
-    // Dos de cada tres ráfagas siguen el mismo sentido: cambiar de mano es la jugada cara
-    if (Math.random() > .66) G.lastSign = -G.lastSign;
-    angle = G.lastA + rand(Math.min(38 * DEG, maxD * .5), maxD) * G.lastSign;
-  }
-  G.lastA = angle;
-  G.gusts.push(makeGust(angle, travel, G.t > 14 && Math.random() < .13, false));
-  G.total++;
-  G.spawnIn = gap;
-}
-
 const addPart = o => { if (G.parts.length < 620) G.parts.push(o); };
 function burst(x, y, n, opts) {
   for (let i = 0; i < n; i++) {
@@ -890,46 +570,7 @@ function burst(x, y, n, opts) {
 function popup(x, y, text, sub, color, big) { G.pops.push({ x, y, text, sub, color, big, life: 0, ttl: 1.25 }); }
 function shake(v) { if (!REDUCED) Cam.shake = Math.max(Cam.shake, v); }
 
-function resolveGust(g) {
-  const off = Math.abs(angDiff(M.a, g.a)), scored = !g.demo && G.mode === 'play', pan = clamp(g.dx * .8, -1, 1);
-  const hx = g.dx * 96, hy = g.dy * 96;
-  if (off <= TOL) {
-    g.state = 'hit'; g.end = 0;
-    const perfect = off <= PERFECT;
-    M.omega = Math.max(M.omega, 26 + Math.min(16, G.combo * 1.2)); M.glow = 1;
-    G.rings.push({ x: hx * .4, y: hy * .4, r: 40, max: g.gold ? 330 : 240, life: 0, ttl: .8, c: g.gold ? '255,210,100' : '255,245,210', w: 6 });
-    G.rings.push({ x: hx * .4, y: hy * .4, r: 20, max: 150, life: 0, ttl: .55, c: '255,255,255', w: 3 });
-    burst(hx * .4, hy * .4, g.gold ? 56 : 30, { v0: 70, v1: 340, c: g.gold ? ['#ffd76a', '#fff4d9', '#ffb03a'] : ['#fff4d9', '#ffffff', '#ffd76a', '#9df2d4'] });
-    Cam.pulse = 1; shake(g.gold ? 7 : 3);
-    Snd.hit(scored ? G.combo : 3, perfect, pan);
-    if (scored) {
-      G.hits++; G.combo++; G.best = Math.max(G.best, G.combo);
-      const gain = (perfect ? 10 : 7) + (g.gold ? 5 : 0);
-      G.eff = clamp(G.eff + gain, 0, 100);
-      const mult = 1 + Math.min(3, G.combo * .25);
-      const pts = Math.round(100 * (perfect ? 1.5 : 1) * (g.gold ? 2 : 1) * mult * (.6 + G.eff / 100 * .8));
-      G.score += pts;
-      popup(g.dx * 215, g.dy * 215, '+' + pts.toLocaleString('es-AR'), g.gold ? '¡Ráfaga dorada!' : perfect ? '¡De frente!' : `+${gain}% eficiencia`, g.gold ? '#ffd76a' : perfect ? '#9df2d4' : '#fff4d9', perfect || g.gold);
-      flash('effCard', 'hit');
-      const sc = $('score'); sc.classList.remove('bump'); void sc.offsetWidth; sc.classList.add('bump');
-    }
-    sendPulses(g.gold ? 9 : 5);
-  } else {
-    g.state = 'miss'; g.end = 0;
-    M.glow = 0;
-    G.rings.push({ x: g.dx * 80, y: g.dy * 80, r: 30, max: 170, life: 0, ttl: .6, c: '255,120,95', w: 4 });
-    burst(g.dx * 80, g.dy * 80, 15, { k: 'dust', v0: 30, v1: 150, t0: .4, t1: .9, s0: 4, s1: 9, c: ['#c8c2b0', '#a9a697'] });
-    shake(6); Snd.miss(pan);
-    if (scored) {
-      G.misses++; G.combo = 0;
-      G.eff = clamp(G.eff - 11, 0, 100);
-      popup(g.dx * 215, g.dy * 215, '−11%', 'Se escapó el viento', '#ff9c88', false);
-      flash('effCard', 'miss');
-      if (G.eff <= 0 && G.mode === 'play') finish(true);
-    }
-  }
-}
-function flash(id, cls) { const e = $(id); e.classList.remove('hit', 'miss'); void e.offsetWidth; e.classList.add(cls); }
+function flash(id, cls) { const e = $(id); if (!e) return; e.classList.remove('hit', 'miss'); void e.offsetWidth; e.classList.add(cls); }
 function sendPulses(n) {
   const lit = W.houses.filter(h => h.lit > .3 || h.want);
   for (let i = 0; i < n; i++) {
@@ -938,91 +579,27 @@ function sendPulses(n) {
   }
 }
 
-function startCountdown() {
-  hideAll(); Snd.init();
-  document.body.classList.add('in-game'); document.body.classList.remove('practice');
-  resetRun(); G.mode = 'countdown'; G.dayTarget = 0; camTarget();
-  syncHud(true);
-  const steps = ['3', '2', '1', '¡Viento!']; let i = 0; const box = $('count');
-  clearTimeout(G.cTimer);
-  const next = () => {
-    if (G.mode !== 'countdown') return;
-    if (i >= steps.length) { box.innerHTML = ''; return; }
-    box.innerHTML = `<span class="${i === 3 ? 'go' : ''}">${steps[i]}</span>`;
-    Snd.count(i === 3);
-    if (i === 3) { G.mode = 'play'; G.cTimer = setTimeout(() => { box.innerHTML = ''; }, 900); return; }
-    i++; G.cTimer = setTimeout(next, 880);
-  };
-  G.cTimer = setTimeout(next, 650);
-}
-
-function finish(blackout) {
-  G.mode = 'end'; G.blackout = blackout; G.dayTarget = 1; camTarget();
-  document.body.classList.remove('danger', 'in-game');
-  const acc = G.hits + G.misses ? G.hits / (G.hits + G.misses) : 0;
-  const avg = G.effAvgN ? G.effAvgSum / G.effAvgN : 0;
-  const homes = Math.round(G.eff / 100 * W.houses.length);
-  const final = Math.round(G.score);
-  let best = 0; try { best = +localStorage.getItem('molino.best') || 0; if (final > best) localStorage.setItem('molino.best', final); } catch (e) { /* almacenamiento bloqueado */ }
-  let title, text, kicker;
-  if (blackout) { kicker = 'Sin energía'; title = 'Apagón en la isla'; text = 'La eficiencia llegó a cero y el pueblo quedó a oscuras. El viento vuelve a soplar cuando quieras.'; }
-  else if (acc >= .85 && G.eff >= 70) { kicker = 'Fin del día'; title = 'Noche brillante'; text = `Atrapaste casi todo el viento y ${homes} de ${W.houses.length} casas brillan. Hasta el faro te saluda.`; }
-  else if (acc >= .6) { kicker = 'Fin del día'; title = 'Pueblo encendido'; text = `Cayó la noche con ${homes} de ${W.houses.length} casas iluminadas. Buen pulso con las aspas.`; }
-  else { kicker = 'Fin del día'; title = 'Luz tenue'; text = `Solo ${homes} de ${W.houses.length} casas llegaron encendidas a la noche. Probá frenar antes de que llegue cada ráfaga.`; }
-  $('endKicker').textContent = kicker; $('endTitle').textContent = title; $('endText').textContent = text;
-  $('stHits').textContent = `${G.hits}/${G.hits + G.misses}`; $('stAcc').textContent = Math.round(acc * 100) + '%';
-  $('stCombo').textContent = G.best; $('stAvg').textContent = Math.round(avg) + '%';
-  $('endRecord').textContent = final > best && final > 0 ? '¡Nuevo récord en esta compu!' : best ? `Récord: ${best.toLocaleString('es-AR')}` : '';
-  const el = $('endScore'), t0 = performance.now(); el.textContent = '0';
-  (function roll(now) { const k = easeOut((now - t0) / 1500); el.textContent = Math.round(final * k).toLocaleString('es-AR'); if (k < 1 && G.mode === 'end') requestAnimationFrame(roll); })(t0);
-  Board.prepare({ score: final, hits: G.hits, misses: G.misses, bestCombo: G.best, efficiency: Math.round(G.eff), seconds: Math.floor(G.t) });
-  setTimeout(() => { if (G.mode === 'end') { $('end').classList.remove('hidden'); $('end').classList.add('show'); } }, blackout ? 1500 : 1100);
-  Snd.end(!blackout && acc >= .6);
-  G.fwIn = blackout ? 1e9 : (acc >= .6 ? 1.1 : 1e9);
-}
-
-/* Ranking global: lo guarda el servidor en Postgres */
-const Board = {
-  run: null,
-  render(list, myRank) {
-    const ol = $('boardList'); ol.textContent = '';
-    list.forEach(e => {
-      const li = document.createElement('li'); if (e.rank === myRank) li.className = 'me';
-      const n = document.createElement('span'); n.className = 'n'; n.textContent = e.rank;
-      const who = document.createElement('span'); who.className = 'who'; who.textContent = e.name;
-      const pts = document.createElement('span'); pts.className = 'pts'; pts.textContent = e.score.toLocaleString('es-AR');
-      li.append(n, who, pts); ol.append(li);
-    });
-  },
-  async load() {
-    try {
-      const r = await fetch('/api/scores'); if (!r.ok) throw new Error(r.status);
-      const d = await r.json(); this.render(d.top);
-      if (!d.top.length) $('boardMsg').textContent = 'Todavía nadie entró al ranking. Puede ser tu lugar.';
-    } catch (e) { this.offline(); }
-  },
-  offline() { $('boardMsg').textContent = 'El ranking no responde en este momento. Tu puntaje quedó guardado en esta compu.'; $('saveForm').hidden = true; },
-  prepare(run) {
-    this.run = run; $('boardMsg').textContent = ''; $('boardList').textContent = '';
-    const form = $('saveForm'); form.hidden = run.score <= 0;
-    try { $('playerName').value = localStorage.getItem('molino.name') || ''; } catch (e) { /* almacenamiento bloqueado */ }
-    $('btnSave').disabled = false; this.load();
-  },
-  async save(name) {
-    if (!this.run) return;
-    const btn = $('btnSave'); btn.disabled = true; $('boardMsg').textContent = '';
-    try {
-      const r = await fetch('/api/scores', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, ...this.run }) });
-      const d = await r.json().catch(() => ({}));
-      if (!r.ok) { $('boardMsg').textContent = d.error || 'No se pudo guardar tu partida.'; btn.disabled = false; return; }
-      try { localStorage.setItem('molino.name', name); } catch (e) { /* almacenamiento bloqueado */ }
-      this.run = null; $('saveForm').hidden = true;
-      $('boardMsg').textContent = d.rank === 1 ? '¡Primer puesto de toda la isla!' : `Quedaste en el puesto ${d.rank}.`;
-      this.render(d.top, d.rank);
-      if (d.rank <= 3) burst(0, 0, 50, { k: 'fw', v0: 120, v1: 420, t0: .8, t1: 1.5, c: ['#ffd76a', '#fff4d9'], drag: 2 });
-    } catch (e) { this.offline(); }
+/* Efectos de una ráfaga al llegar. No toca puntajes: eso es de cada modo. */
+function gustFx(g, hit, perfect, combo) {
+  const pan = clamp(g.dx * .8, -1, 1), hx = g.dx * 96, hy = g.dy * 96;
+  g.end = 0;
+  if (hit) {
+    g.state = 'hit';
+    M.omega = Math.max(M.omega, 26 + Math.min(16, combo * 1.2)); M.glow = 1;
+    G.rings.push({ x: hx * .4, y: hy * .4, r: 40, max: g.gold ? 330 : 240, life: 0, ttl: .8, c: g.gold ? '255,210,100' : '255,245,210', w: 6 });
+    G.rings.push({ x: hx * .4, y: hy * .4, r: 20, max: 150, life: 0, ttl: .55, c: '255,255,255', w: 3 });
+    burst(hx * .4, hy * .4, g.gold ? 56 : 30, { v0: 70, v1: 340, c: g.gold ? ['#ffd76a', '#fff4d9', '#ffb03a'] : ['#fff4d9', '#ffffff', '#ffd76a', '#9df2d4'] });
+    Cam.pulse = 1; shake(g.gold ? 7 : 3);
+    Snd.hit(combo, perfect, pan);
+    sendPulses(g.gold ? 9 : 5);
+  } else {
+    g.state = 'miss';
+    M.glow = 0;
+    G.rings.push({ x: g.dx * 80, y: g.dy * 80, r: 30, max: 170, life: 0, ttl: .6, c: '255,120,95', w: 4 });
+    burst(g.dx * 80, g.dy * 80, 15, { k: 'dust', v0: 30, v1: 150, t0: .4, t1: .9, s0: 4, s1: 9, c: ['#c8c2b0', '#a9a697'] });
+    shake(6); Snd.miss(pan);
   }
-};
+}
 
 /* ---------- 8. Actualización ---------- */
 let T = 0;
@@ -1052,8 +629,8 @@ function setGestureFromHands(g) {
   syncGestureUI();
 }
 function applyControl(flags) {
-  // flags: left/right/open/fist activos en este instante. El puño manda sobre todo.
-  if (G.mode === 'attract' || G.mode === 'end') return;
+  // flags: comandos activos en este instante. Detener manda sobre todo.
+  if (G.mode === 'attract' || G.mode === 'end' || Rules.noMillControl) return;
   if (flags.left) M.dir = -1;
   if (flags.right) M.dir = 1;
   if (flags.fist) {
@@ -1070,31 +647,12 @@ function update(dt) {
   Cam.shake *= Math.exp(-dt * 7); Cam.pulse *= Math.exp(-dt * 6);
   Cam.sx = Math.sin(T * 61) * Cam.shake; Cam.sy = Math.cos(T * 47) * Cam.shake;
 
-  // Día
-  if (G.mode === 'play') {
-    G.t += dt; G.day = clamp(G.t / GAME_SECS);
-    G.score += G.eff / 100 * 12 * dt;
-    G.effAvgSum += G.eff * dt; G.effAvgN += dt;
-    G.spawnIn -= dt; if (G.spawnIn <= 0 && G.t < GAME_SECS - 2) spawnNext();
-    if (G.t >= GAME_SECS) finish(false);
-  } else {
-    const speed = G.mode === 'countdown' ? 2.2 : G.mode === 'end' ? (G.blackout ? 1.1 : .9) : 2;
-    G.day += (G.dayTarget - G.day) * (1 - Math.exp(-dt * speed));
-  }
+  if (Rules.day) Rules.day(dt);
   updateSky();
+  if (Rules.tick) Rules.tick(dt);
 
   // Molino
-  if (G.mode === 'attract') {
-    // Modo demostración: el molino busca el viento solo
-    const target = G.gusts.find(g => g.state === 'fly' || g.state === 'warn');
-    if (target) { const d = angDiff(target.a, M.a); M.vel = clamp(d * 3, -1.8, 1.8); M.a += M.vel * dt; } else M.vel = 0;
-    G.spawnIn -= dt;
-    if (G.spawnIn <= 0) { const a = rand(TAU); G.gusts.push(makeGust(a, 4.2, Math.random() < .18, true)); G.spawnIn = rand(3.2, 4.6); }
-  } else if (G.mode === 'practice') {
-    G.spawnIn -= dt;
-    if (G.spawnIn <= 0) { G.gusts.push(makeGust(rand(TAU), 5.4, false, true)); G.spawnIn = 5.5; }
-  }
-  if (G.mode !== 'attract') {
+  if (G.mode !== 'attract' && !Rules.netMill) {
     if (M.moving) { const target = M.dir * rotSpeed(); M.vel += (target - M.vel) * (1 - Math.exp(-dt * 12)); M.a += M.vel * dt; }
     else M.vel = 0;
   }
@@ -1118,7 +676,7 @@ function update(dt) {
         const sc = g.gold ? ['#ffd76a', '#ffe9a8'] : ['#ffc1d4', '#fff4d9', '#ffd76a', '#ffffff', '#ff9eb5'];
         addPart({ k: 'petal', x: g.dx * along + g.nx * lat, y: g.dy * along + g.ny * lat, vx: -g.dx * g.sp * rand(.9, 1.25) + g.nx * rand(-22, 22), vy: -g.dy * g.sp * rand(.9, 1.25) + g.ny * rand(-22, 22), life: 0, ttl: rand(.7, 1.5), s: rand(1.5, 3.1), c: pick(sc), rot: rand(TAU), vr: rand(-9, 9), drag: 0 });
       }
-      if (g.r <= IMPACT) resolveGust(g);
+      if (g.r <= IMPACT) { if (Rules.resolve) Rules.resolve(g); else g.r = IMPACT; }
     } else {
       g.end += dt;
       g.r -= g.sp * dt * (g.state === 'hit' ? 1.7 : 1.15);
@@ -1149,9 +707,9 @@ function update(dt) {
   }
 
   // Casas: se encienden de la más cercana a la más lejana
-  const want = Math.round(G.eff / 100 * W.houses.length);
+  const wantN = Math.round(G.eff / 100 * W.houses.length);
   W.houses.forEach((h, i) => {
-    h.want = !G.blackout && i < want;
+    h.want = Rules.houseWant ? Rules.houseWant(h, i) : !G.blackout && i < wantN;
     const was = h.lit; h.lit += ((h.want ? 1 : 0) - h.lit) * (1 - Math.exp(-dt * (h.want ? 3 : 6)));
     if (was < .4 && h.lit >= .4 && h.want) { h.pop = 1; burst(h.x, h.y, 7, { v0: 20, v1: 70, s0: 1, s1: 2.4, t1: .7 }); }
     h.pop *= Math.exp(-dt * 4);
@@ -1202,7 +760,7 @@ function update(dt) {
       Snd.boom(clamp(r.tx / 700, -1, 1)); G.rockets.splice(i, 1);
     }
   }
-  syncHud();
+  if (Rules.ui) Rules.ui();
 }
 
 /* ---------- 9. Render ---------- */
@@ -1263,7 +821,7 @@ function drawSea() {
 
 function drawGustWakes() {
   for (const g of G.gusts) {
-    if (g.state === 'warn') continue;
+    if (g.state === 'warn' || g.hidden) continue;
     const a = g.state === 'fly' ? .24 : .24 * (1 - g.end / .9); if (a <= 0) continue;
     const c = g.r + 110, l = 190, w = 92 * clamp(g.r / 520) + 34;
     ctx.save(); ctx.translate(g.dx * c, g.dy * c); ctx.rotate(g.a); ctx.globalAlpha = a; ctx.drawImage(SP.gWhite, -l, -w, l * 2, w * 2); ctx.restore();
@@ -1283,7 +841,7 @@ function aimSector(alpha, from, lighter) {
 function drawLand() {
   ctx.drawImage(SP.ground, -620, -620, 1240, 1240);
   blit(SP.lighthouse, W.light.x, W.light.y);
-  if (G.mode !== 'attract') aimSector(.3 * (1 - Sky.night * .5), 60);
+  if (G.mode !== 'attract' && !Rules.hideRing) aimSector(.3 * (1 - Sky.night * .5), 60);
   drawGustWakes();
 
   // Sombras
@@ -1400,7 +958,7 @@ function drawAtmosphere() {
     const sp = SP.cloudSh[cl.k], w = sp.wu * cl.s, h = sp.hu * cl.s;
     ctx.globalAlpha = Sky.sa * .46; ctx.drawImage(sp, cl.x + 45 * Sky.sx - w / 2, cl.y + 55 - h / 2, w, h);
   }
-  for (const cl of W.clouds) {
+  if (!Rules.noClouds) for (const cl of W.clouds) {
     const d = Math.hypot(cl.x, cl.y), a = clamp((d - 470) / 300) * .92;
     if (a <= .01) continue;
     const sp = SP.cloud[cl.k], w = sp.wu * cl.s * 1.08, h = sp.hu * cl.s * 1.08;
@@ -1489,7 +1047,7 @@ function drawLights() {
 
 function drawRing() {
   const R = 178, a = M.a;
-  if (G.mode === 'attract') return;
+  if (G.mode === 'attract' || Rules.hideRing) return;
   if (Sky.night > .1) aimSector(.15 * Sky.night, 186, true);
   // Bordes del sector, animados
   ctx.save(); ctx.lineCap = 'round'; ctx.setLineDash([3, 15]); ctx.lineDashOffset = T * (M.moving ? 42 : 18);
@@ -1502,7 +1060,7 @@ function drawRing() {
   for (let i = 0; i < 24; i++) { const an = i / 24 * TAU, r0 = i % 6 === 0 ? R - 8 : R - 4; ctx.moveTo(Math.cos(an) * r0, Math.sin(an) * r0); ctx.lineTo(Math.cos(an) * R, Math.sin(an) * R); } ctx.stroke();
 
   // Próxima ráfaga: arco que guía hacia dónde girar
-  let next = null; for (const g of G.gusts) if ((g.state === 'fly' || g.state === 'warn') && (!next || g.r < next.r)) next = g;
+  let next = null; for (const g of G.gusts) if (!g.hidden && (g.state === 'fly' || g.state === 'warn') && (!next || g.r < next.r)) next = g;
   let aligned = false;
   if (next) {
     const d = angDiff(next.a, a); aligned = Math.abs(d) <= TOL;
@@ -1520,7 +1078,7 @@ function drawRing() {
   ctx.save(); ctx.rotate(a); ctx.fillStyle = '#fff'; ctx.strokeStyle = 'rgba(40,30,20,.55)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(R + 15, 0); ctx.lineTo(R + 1, -8); ctx.lineTo(R - 4, 0); ctx.lineTo(R + 1, 8); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore();
   // Marcadores de ráfagas
   for (const g of G.gusts) {
-    if (g.state !== 'fly' && g.state !== 'warn') continue;
+    if ((g.state !== 'fly' && g.state !== 'warn') || g.hidden) continue;
     const inside = Math.abs(angDiff(g.a, a)) <= TOL;
     const prog = g.state === 'warn' ? 0 : clamp(1 - (g.r - IMPACT) / (SPAWN_R - IMPACT));
     ctx.save(); ctx.rotate(g.a);
@@ -1534,6 +1092,7 @@ function drawRing() {
 }
 
 function drawGust(g) {
+  if (g.hidden) return;
   const night = Sky.night;
   if (g.state === 'warn') {
     const k = clamp(g.warnT / g.warn), x = g.dx * (coastAt(g.a) + 26), y = g.dy * (coastAt(g.a) + 26);
@@ -1662,6 +1221,7 @@ function render(dt) {
   drawLand();
   drawMill();
   drawAtmosphere();
+  if (Rules.preGrade) Rules.preGrade();
   grade();
   drawLights();
   worldT();
@@ -1669,6 +1229,7 @@ function render(dt) {
   G.gusts.forEach(drawGust);
   drawParticles();
   drawPopups();
+  if (Rules.overlay) { worldT(); Rules.overlay(); }
   drawVignette();
   drawIntro(dt);
 }
@@ -1717,7 +1278,7 @@ async function startVision(onStatus) {
   onStatus('Encendiendo la cámara…');
   await Vision.camera.start();
   Vision.ready = true;
-  $('camMsg').style.display = 'none';
+  if ($('camMsg')) $('camMsg').style.display = 'none';
 }
 
 function onHandResults(res) {
@@ -1729,28 +1290,32 @@ function onHandResults(res) {
     const label = handed[i] ? handed[i].label : 'Right';
     if (seenThisFrame[label]) return; seenThisFrame[label] = true;
     const src = world[i] && world[i].length === 21 ? world[i] : lm.map(p => ({ x: p.x * 4 / 3, y: p.y, z: p.z * 4 / 3 }));
-    const r = classifyHand(src, label);
+    details.push({ lm, world: src, label, g: null });
+    if (Rules.trainer) return; // mientras se graba no se reconoce nada
+    const g = Signs.match(src, label);
     const slot = Vision.slots[label];
-    slot.h.push(r.g); if (slot.h.length > 4) slot.h.shift();
+    slot.h.push(g); if (slot.h.length > 4) slot.h.shift();
     slot.seen = now;
     // Se acepta un gesto cuando aparece en 3 de las últimas 4 lecturas
     const count = {}; slot.h.forEach(g => { if (g) count[g] = (count[g] || 0) + 1; });
     let stable = null; for (const k in count) if (count[k] >= 3) stable = k;
     slot.g = stable; if (!stable && slot.h.filter(g => g === null).length >= 3) slot.g = null;
-    details.push({ lm, label, g: slot.g });
+    details[details.length - 1].g = slot.g;
   });
   for (const k in Vision.slots) { const s = Vision.slots[k]; if (now - s.seen > 280) { s.h.length = 0; s.g = null; } }
   Hand.present = lms.length > 0;
+  if (Rules.trainer && Rules.trainer(details)) { drawSkeleton(details); return; }
   const flags = {}; for (const k in Vision.slots) if (Vision.slots[k].g) flags[Vision.slots[k].g] = true;
-  // Lo que se muestra: el puño manda, después dirección, después avanzar
+  // Lo que se muestra: detener manda, después dirección, después avanzar
   const shown = flags.fist ? 'fist' : flags.left ? 'left' : flags.right ? 'right' : flags.open ? 'open' : null;
   if (performance.now() > Hand.keyUntil) { setGestureFromHands(shown); syncGestureUI(); }
   applyControl(flags);
   drawSkeleton(details);
+  if (Rules.onHands) Rules.onHands(details);
 }
 
 function drawSkeleton(list) {
-  const c = $('skel'), x = c.getContext('2d'), w = c.width, h = c.height;
+  const c = $('skel'); if (!c) return; const x = c.getContext('2d'), w = c.width, h = c.height;
   x.clearRect(0, 0, w, h);
   for (const d of list) {
     const col = d.g ? GESTURES[d.g].c : '#fff4d9', P = d.lm.map(p => ({ x: p.x * w, y: p.y * h }));
@@ -1763,44 +1328,12 @@ function drawSkeleton(list) {
   }
 }
 
-/* ---------- 11. Interfaz ---------- */
+/* ---------- Lectura de gestos en pantalla ---------- */
 const uiCache = {};
 function setText(id, t) { if (uiCache[id] !== t) { uiCache[id] = t; $(id).textContent = t; } }
-const dayArc = $('dayArc'); const arcLen = dayArc.getTotalLength(); dayArc.style.strokeDasharray = arcLen;
-function syncHud(force) {
-  G.shown += (G.score - G.shown) * Math.min(1, .16);
-  setText('score', Math.round(G.shown).toLocaleString('es-AR'));
-  const left = G.mode === 'play' || G.mode === 'end' ? Math.max(0, GAME_SECS - G.t) : GAME_SECS;
-  const sec = Math.ceil(left); setText('timeText', `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`);
-  const urgent = G.mode === 'play' && left <= 10; if (uiCache.urg !== urgent) { uiCache.urg = urgent; $('timeCard').classList.toggle('urgent', urgent); }
-  const day = clamp(G.mode === 'play' || G.mode === 'end' ? G.t / GAME_SECS : 0);
-  if (force || uiCache.day !== day) {
-    uiCache.day = day; dayArc.style.strokeDashoffset = arcLen * (1 - day);
-    const a = PI * (1 - day), sx = 85 + Math.cos(a) * 73, sy = 86 - Math.sin(a) * 73, sun = $('sunDot'), halo = $('sunHalo');
-    sun.setAttribute('cx', sx); sun.setAttribute('cy', sy); halo.setAttribute('cx', sx); halo.setAttribute('cy', sy);
-    const c = day > .82 ? '#e7ecff' : day > .62 ? '#ff9a6b' : '#ffd76a'; sun.setAttribute('fill', c); halo.setAttribute('fill', c);
-  }
-  const e = Math.round(G.eff);
-  if (force || uiCache.eff !== e) {
-    uiCache.eff = e; $('effText').textContent = e + '%';
-    $('effFill').style.width = e + '%'; $('effGhost').style.width = e + '%';
-    document.documentElement.style.setProperty('--eff', e >= 60 ? '#6fe3b0' : e >= 30 ? '#ffc857' : '#ff5d47');
-    const on = Math.round(e / 100 * W.houses.length);
-    $('homesText').textContent = `${on} de ${W.houses.length} casas encendidas`;
-  }
-  const danger = G.mode === 'play' && e < 25; if (uiCache.dg !== danger) { uiCache.dg = danger; document.body.classList.toggle('danger', danger); }
-  const combo = G.combo >= 2 ? '×' + G.combo : ''; if (uiCache.cb !== combo) { uiCache.cb = combo; const el = $('combo'); if (combo) el.textContent = combo; el.classList.toggle('show', !!combo); }
-  const st = M.moving ? (M.dir < 0 ? 'Girando a la izquierda' : 'Girando a la derecha') : (M.dir < 0 ? 'Frenado · próximo giro a la izquierda' : 'Frenado · próximo giro a la derecha');
-  if (uiCache.st !== st) {
-    uiCache.st = st; $('millStateText').textContent = st;
-    const arc = $('millArc');
-    const big = 'M19 3A16 16 0 0 1 35 19'; const lft = 'M19 3A16 16 0 0 0 3 19';
-    arc.setAttribute('d', M.dir < 0 ? lft : big); arc.setAttribute('stroke', M.moving ? '#6fe3b0' : '#ff8d78');
-  }
-  $('millBlades').setAttribute('transform', `rotate(${(M.a / DEG).toFixed(1)} 19 19)`);
-}
 function syncGestureUI() {
   const g = Hand.seen, box = $('gestureNow'), camBox = $('cam');
+  if (!box) return;
   const key = (g || (Hand.present ? '?' : '-'));
   if (uiCache.gest !== key) {
     uiCache.gest = key; camBox.dataset.g = g || '';
@@ -1810,76 +1343,6 @@ function syncGestureUI() {
   }
   Hand.tried.forEach(t => { const c = document.querySelector(`.chip[data-g=${t}]`); if (c && !c.classList.contains('done')) c.classList.add('done'); });
 }
-function hideAll() { ['landing', 'practice', 'end'].forEach(id => { const e = $(id); e.classList.add('hidden'); e.classList.remove('show'); }); }
-function goPractice() {
-  hideAll(); Snd.init();
-  document.body.classList.add('in-game', 'practice');
-  G.gusts.length = 0; G.pops.length = 0;
-  Object.assign(G, { mode: 'practice', dayTarget: .3, eff: 60, score: 0, shown: 0, combo: 0, spawnIn: 2.6 });
-  M.moving = false; M.vel = 0; camTarget();
-  $('pracTitle').textContent = 'Probá tus gestos';
-  $('pracText').textContent = G.keyboard ? 'Usá las flechas: izquierda, derecha, arriba para avanzar y abajo para frenar.' : 'El molino ya te obedece. Las ráfagas de práctica no cuentan.';
-  $('practice').classList.remove('hidden');
-  syncGestureUI(); syncHud(true);
-}
-function showError(kind) {
-  const m = {
-    denied: 'No hay permiso para usar la cámara. Habilitala desde el candado de la barra de direcciones y volvé a probar, o jugá con teclado.',
-    nocam: 'No encontramos ninguna cámara en este equipo. Podés jugar con teclado.',
-    net: 'No se pudo descargar el modelo de manos. Revisá la conexión y probá de nuevo, o jugá con teclado.',
-    other: 'La cámara o el modelo no arrancaron. Cerrá otras apps que usen la cámara y volvé a probar, o jugá con teclado.'
-  }[kind] || '';
-  const e = $('err'); e.textContent = m; e.classList.add('show');
-}
-
-(function initUI() {
-  // Título con letras animadas
-  const words = [['Desafío', 0], ['del', 1], ['Molino', 0]]; let i = 0, html = '';
-  words.forEach(([w, em], n) => {
-    const letters = [...w].map(ch => `<span class="l" style="--i:${i++}">${ch}</span>`).join('');
-    html += em ? `<em class="w" aria-hidden="true">${letters}</em> ` : `<span class="w" aria-hidden="true">${letters}</span>${n === 0 ? ' ' : ''}`;
-    if (n === 1) html += '<br>';
-  });
-  $('title').innerHTML = html;
-  $('guide').innerHTML = [['left', 'L con la izquierda', 'gira a la izquierda'], ['right', 'L con la derecha', 'gira a la derecha'], ['open', 'Mano abierta', 'empieza a rotar'], ['fist', 'Puño', 'frena en seco']]
-    .map(([k, b, s]) => `<div class="gcard">${handSVG(k)}<b>${b}</b><small>${s}</small></div>`).join('');
-  $('chips').innerHTML = ['left', 'right', 'open', 'fist'].map(k => `<div class="chip" data-g="${k}" title="${GESTURES[k].s}">${handSVG(k)}<span>${GESTURES[k].t}</span><span class="ok">✓</span></div>`).join('');
-
-  $('btnCam').addEventListener('click', async () => {
-    const b = $('btnCam'); $('err').classList.remove('show'); Snd.init();
-    b.disabled = true;
-    const spin = '<svg class="spinner" viewBox="0 0 24 24" aria-hidden="true"><g fill="currentColor"><path d="M12 12 9.5 1h5z"/><path d="M12 12 9.5 23h5z"/><path d="M12 12 1 9.5v5z"/><path d="M12 12 23 9.5v5z"/></g></svg>';
-    try {
-      await startVision(msg => { b.innerHTML = spin + `<span>${msg}</span>`; });
-      goPractice();
-    } catch (e) {
-      console.error(e); showError(e.kind || 'other');
-    }
-    b.disabled = false; b.textContent = 'Encender cámara y jugar';
-  });
-  $('btnKeys').addEventListener('click', () => {
-    G.keyboard = true; document.body.classList.add('keyboard');
-    $('camMsg').textContent = 'Sin cámara: jugás con el teclado';
-    goPractice();
-  });
-  $('saveForm').addEventListener('submit', e => { e.preventDefault(); const n = $('playerName').value.trim(); if (n) Board.save(n); });
-  $('btnGo').addEventListener('click', startCountdown);
-  $('btnAgain').addEventListener('click', startCountdown);
-  $('btnRestart').addEventListener('click', startCountdown);
-  $('btnSound').addEventListener('click', () => { Snd.init(); const on = Snd.toggle(); $('btnSound').classList.toggle('off', !on); });
-
-  addEventListener('keydown', e => {
-    if (e.repeat || G.mode === 'attract' || e.target.tagName === 'INPUT') return;
-    const k = { ArrowLeft: 'left', a: 'left', A: 'left', ArrowRight: 'right', d: 'right', D: 'right', ArrowUp: 'open', w: 'open', W: 'open', ArrowDown: 'fist', s: 'fist', S: 'fist', ' ': 'fist' }[e.key];
-    if (!k) return;
-    if (e.key === ' ' && e.target.tagName === 'BUTTON') e.target.blur();
-    e.preventDefault();
-    Hand.keyUntil = performance.now() + 700; setGestureFromHands(k); syncGestureUI(); applyControl({ [k]: true });
-    setTimeout(() => { if (performance.now() >= Hand.keyUntil && !Vision.ready) { setGestureFromHands(null); syncGestureUI(); } }, 720);
-  });
-
-  let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(buildAll, 160); layout(); });
-})();
 
 /* ---------- Bucle principal ---------- */
 let lastNow = performance.now(), fpsT = 0, fpsN = 0;
@@ -1898,14 +1361,10 @@ function frame(now) {
   }
 }
 
-(function boot() {
+function bootIsla() {
+  Signs.load();
   genWorld();
-  G.spawnIn = 2.2;
   buildAll();
-  G.gusts.push(makeGust(M.a + 1.5, 4.6, false, true));
-  syncGestureUI(); syncHud(true);
+  let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(buildAll, 160); layout(); });
   requestAnimationFrame(t => { lastNow = t; frame(t); });
-})();
-</script>
-</body>
-</html>
+}

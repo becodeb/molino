@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Desafío del Molino</title>
+<meta name="description" content="Orientá un molino con las manos, atrapá el viento y encendé un pueblo entero antes de que caiga la noche.">
+<meta name="theme-color" content="#10303a">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%2310303a'/%3E%3Cg fill='%23fff1d0'%3E%3Cpath d='M32 32 26 8h12z'/%3E%3Cpath d='M32 32 26 56h12z'/%3E%3Cpath d='M32 32 8 26v12z'/%3E%3Cpath d='M32 32 56 26v12z'/%3E%3C/g%3E%3Ccircle cx='32' cy='32' r='6' fill='%23e8513f'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&family=Fraunces:ital,opsz,wght,SOFT@0,9..144,500..900,100;1,9..144,400..700,100&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<canvas id="world" role="img" aria-label="Isla vista desde arriba con un molino en el centro y ráfagas de viento que llegan desde la costa"></canvas>
+<div id="danger"></div>
+
+<section id="landing" class="overlay">
+  <div class="land sheet">
+    <h1 id="title" aria-label="Desafío del Molino"></h1>
+    <p class="lead">Noventa segundos, del amanecer a la noche. Inventá tus propias señas, girá el molino con las manos, atrapá cada ráfaga de frente y encendé todas las casas de la isla.</p>
+    <div class="gestures" id="guide"></div>
+    <div class="cta">
+      <button id="btnCam" class="btn primary">Encender cámara y jugar</button>
+      <button id="btnKeys" class="btn ghost">Jugar con teclado</button>
+    </div>
+    <div id="err" role="alert"></div>
+    <p class="fine">Tu imagen se analiza en este navegador y no se envía a ningún lado. <a href="/grupal" style="color:var(--gold);font-weight:700">Jugar en equipo</a></p>
+  </div>
+</section>
+
+<aside id="hudL" class="hud" aria-label="Estadísticas de la partida">
+  <div class="brand"><svg viewBox="0 0 64 64" aria-hidden="true"><g fill="#fff4d9"><path d="M32 32 26 6h12z"/><path d="M32 32 26 58h12z"/><path d="M32 32 6 26v12z"/><path d="M32 32 58 26v12z"/></g><circle cx="32" cy="32" r="6" fill="#ff6f59"/></svg><b>Desafío<br>del Molino</b></div>
+  <div class="panel score-card"><span class="label">Puntaje</span><span id="score">0</span><span id="combo"></span></div>
+  <div class="panel time-card" id="timeCard"><span class="label">Tiempo</span>
+    <div class="dial"><svg viewBox="0 0 170 92" aria-hidden="true">
+      <defs><linearGradient id="dayG" x1="0" x2="1"><stop offset="0" stop-color="#ffb08a"/><stop offset=".45" stop-color="#ffe58a"/><stop offset=".75" stop-color="#ff7f6b"/><stop offset="1" stop-color="#6d6fe0"/></linearGradient></defs>
+      <path d="M12 86A73 73 0 0 1 158 86" fill="none" stroke="rgba(255,244,217,.14)" stroke-width="7" stroke-linecap="round"/>
+      <path id="dayArc" d="M12 86A73 73 0 0 1 158 86" fill="none" stroke="url(#dayG)" stroke-width="7" stroke-linecap="round"/>
+      <circle id="sunHalo" r="14" fill="#ffd76a" opacity=".28"/><circle id="sunDot" r="8" fill="#ffd76a"/>
+    </svg><div id="timeText">1:30</div></div>
+  </div>
+  <div class="panel eff-card" id="effCard">
+    <div class="eff-head"><span class="label">Eficiencia</span><span id="effText">60%</span></div>
+    <div class="bar"><i id="effGhost" style="width:60%"></i><i id="effFill" style="width:60%"></i></div>
+    <div class="ticks"><span>0</span><span>50</span><span>100</span></div>
+    <div id="homes"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 12h3v9h5v-6h4v6h5v-9h3z"/></svg><span id="homesText"></span></div>
+  </div>
+  <div class="hud-actions">
+    <button id="btnRestart" class="btn ghost">Reiniciar partida</button>
+    <button id="btnSound" class="btn ghost" aria-label="Sonido"><svg viewBox="0 0 24 24"><path d="M4 9.5v5h4l5 4v-13l-5 4z" fill="currentColor"/><path class="w" d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/><path class="x" d="m16.5 9.5 5 5m0-5-5 5"/></svg></button>
+  </div>
+</aside>
+
+<aside id="hudR" class="hud" aria-label="Lectura de gestos">
+  <div class="cam" id="cam"><video id="vid" playsinline muted></video><canvas id="skel"></canvas><div id="camMsg">La cámara está apagada</div></div>
+  <div class="panel readout">
+    <div id="gestureNow" class="dim" aria-live="polite"><span>Mostrá una mano</span></div>
+    <div class="chips" id="chips"></div>
+  </div>
+  <div class="panel mill-state">
+    <svg id="millIcon" viewBox="0 0 38 38" aria-hidden="true"><circle cx="19" cy="19" r="16" fill="none" stroke="rgba(255,244,217,.2)" stroke-width="3"/><path id="millArc" fill="none" stroke="#6fe3b0" stroke-width="3.4" stroke-linecap="round"/><g id="millBlades"><path d="M19 19 16.6 7h4.8zM19 19 16.6 31h4.8zM19 19 7 16.6v4.8zM19 19 31 16.6v4.8z" fill="#fff4d9"/></g><circle cx="19" cy="19" r="2.6" fill="#ff6f59"/></svg>
+    <div><span class="label">Molino</span><div id="millStateText">Detenido</div></div>
+  </div>
+  <div class="panel keys-hint"><kbd>←</kbd> <kbd>→</kbd> dirección · <kbd>↑</kbd> avanzar · <kbd>↓</kbd> o <kbd>Espacio</kbd> detener</div>
+</aside>
+
+<section id="practice" class="overlay hidden">
+  <div class="panel prac sheet">
+    <p><b id="pracTitle">Probá tus gestos</b><span id="pracText">El molino ya te obedece. Practicá lo que quieras y arrancá cuando quieras.</span></p>
+    <button id="btnSigns" class="btn ghost" type="button">Cambiar señas</button>
+    <button id="btnGo" class="btn primary">¡A jugar!</button>
+  </div>
+</section>
+
+<div id="count" aria-live="assertive"></div>
+
+<section id="end" class="overlay hidden">
+  <div class="end-card sheet">
+    <div id="endKicker" class="rev" style="--d:0"></div>
+    <h2 id="endTitle" class="rev" style="--d:1"></h2>
+    <p id="endText" class="rev" style="--d:2"></p>
+    <div id="endScore" class="rev" style="--d:3">0</div>
+    <div id="endRecord" class="rev" style="--d:3"></div>
+    <div class="stats rev" style="--d:4">
+      <div class="stat"><b id="stHits">0</b><small>ráfagas atrapadas</small></div>
+      <div class="stat"><b id="stAcc">0%</b><small>de puntería</small></div>
+      <div class="stat"><b id="stCombo">0</b><small>mejor racha</small></div>
+      <div class="stat"><b id="stAvg">0%</b><small>eficiencia media</small></div>
+    </div>
+    <button id="btnAgain" class="btn primary rev" style="--d:5">Jugar de nuevo</button>
+  </div>
+  <div class="panel board sheet rev" style="--d:6">
+    <h3>Ranking de la isla</h3>
+    <form id="saveForm" autocomplete="off">
+      <label class="label" for="playerName">Tu nombre</label>
+      <div class="save-row">
+        <input id="playerName" maxlength="18" placeholder="Cómo te llamás" enterkeyhint="done" required>
+        <button id="btnSave" class="btn primary" type="submit">Guardar</button>
+      </div>
+    </form>
+    <p id="boardMsg" role="status"></p>
+    <ol id="boardList"></ol>
+  </div>
+</section>
+
+<script src="/core.js"></script>
+<script src="/signs.js"></script>
+<script src="/solo.js"></script>
+</body>
+</html>

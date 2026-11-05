@@ -1,11 +1,14 @@
-// Servidor del Desafío del Molino: sirve el juego y guarda el ranking global en Postgres.
+// Servidor del Desafío del Molino: sirve el juego, coordina las partidas grupales
+// por WebSocket y guarda rankings y configuración en Postgres.
 package main
 
 import (
 	"context"
+	"crypto/rand"
 	"embed"
 	"encoding/json"
 	"errors"
+	"io/fs"
 	"log"
 	"net"
 	"net/http"
@@ -18,12 +21,11 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/coder/websocket"
 )
 
-//go:embed index.html
-var static embed.FS
+//go:embed web
+var webFiles embed.FS
 
 const (
 	maxNameLen = 18
@@ -34,30 +36,6 @@ const (
 	minPlayed = 20 // segundos: una partida más corta no entra al ranking, salvo apagón
 	postLimit = 6  // partidas guardadas por minuto y por IP
 )
-
-const schema = `
-CREATE TABLE IF NOT EXISTS scores (
-	id         BIGSERIAL PRIMARY KEY,
-	name       TEXT        NOT NULL,
-	score      INTEGER     NOT NULL CHECK (score >= 0),
-	hits       INTEGER     NOT NULL CHECK (hits >= 0),
-	misses     INTEGER     NOT NULL CHECK (misses >= 0),
-	best_combo INTEGER     NOT NULL CHECK (best_combo >= 0),
-	efficiency INTEGER     NOT NULL CHECK (efficiency BETWEEN 0 AND 100),
-	created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-CREATE INDEX IF NOT EXISTS scores_rank_idx ON scores (score DESC, created_at ASC);
-`
-
-type entry struct {
-	Rank       int    `json:"rank"`
-	Name       string `json:"name"`
-	Score      int    `json:"score"`
-	Hits       int    `json:"hits"`
-	Misses     int    `json:"misses"`
-	BestCombo  int    `json:"bestCombo"`
-	Efficiency int    `json:"efficiency"`
-}
 
 type submission struct {
 	Name       string `json:"name"`
@@ -96,12 +74,15 @@ func (s *submission) validate() error {
 	return nil
 }
 
-// limiter cuenta envíos por IP en ventanas de un minuto.
+// limiter cuenta usos por IP en ventanas de un minuto.
 type limiter struct {
 	mu     sync.Mutex
+	max    int
 	window time.Time
 	count  map[string]int
 }
+
+func newLimiter(max int) *limiter { return &limiter{max: max} }
 
 func (l *limiter) allow(ip string) bool {
 	l.mu.Lock()
@@ -110,7 +91,7 @@ func (l *limiter) allow(ip string) bool {
 		l.window, l.count = now, map[string]int{}
 	}
 	l.count[ip]++
-	return l.count[ip] <= postLimit
+	return l.count[ip] <= l.max
 }
 
 func clientIP(r *http.Request) string {
@@ -127,11 +108,6 @@ func clientIP(r *http.Request) string {
 	return host
 }
 
-type server struct {
-	db  *pgxpool.Pool
-	lim *limiter
-}
-
 func writeJSON(w http.ResponseWriter, code int, v any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
@@ -141,27 +117,16 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 	}
 }
 
-func (s *server) top(ctx context.Context) ([]entry, error) {
-	rows, err := s.db.Query(ctx, `
-		SELECT name, score, hits, misses, best_combo, efficiency
-		FROM scores ORDER BY score DESC, created_at ASC LIMIT $1`, topLimit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	list := make([]entry, 0, topLimit)
-	for rows.Next() {
-		e := entry{Rank: len(list) + 1}
-		if err := rows.Scan(&e.Name, &e.Score, &e.Hits, &e.Misses, &e.BestCombo, &e.Efficiency); err != nil {
-			return nil, err
-		}
-		list = append(list, e)
-	}
-	return list, rows.Err()
+type server struct {
+	store     *Store
+	hub       *Hub
+	cfg       *Config
+	scoreLim  *limiter
+	createLim *limiter
 }
 
 func (s *server) getScores(w http.ResponseWriter, r *http.Request) {
-	list, err := s.top(r.Context())
+	list, err := s.store.topScores(r.Context())
 	if err != nil {
 		log.Printf("leer ranking: %v", err)
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "ranking no disponible"})
@@ -171,7 +136,7 @@ func (s *server) getScores(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) postScore(w http.ResponseWriter, r *http.Request) {
-	if !s.lim.allow(clientIP(r)) {
+	if !s.scoreLim.allow(clientIP(r)) {
 		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "demasiadas partidas seguidas, probá en un minuto"})
 		return
 	}
@@ -186,24 +151,13 @@ func (s *server) postScore(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return
 	}
-	ctx := r.Context()
-	var id int64
-	err := s.db.QueryRow(ctx, `
-		INSERT INTO scores (name, score, hits, misses, best_combo, efficiency)
-		VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
-		sub.Name, sub.Score, sub.Hits, sub.Misses, sub.BestCombo, sub.Efficiency).Scan(&id)
+	rank, err := s.store.addScore(r.Context(), sub)
 	if err != nil {
 		log.Printf("guardar partida: %v", err)
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "no se pudo guardar"})
 		return
 	}
-	var rank int
-	if err := s.db.QueryRow(ctx, `
-		SELECT count(*) + 1 FROM scores
-		WHERE score > $1 OR (score = $1 AND id < $2)`, sub.Score, id).Scan(&rank); err != nil {
-		log.Printf("calcular puesto: %v", err)
-	}
-	list, err := s.top(ctx)
+	list, err := s.store.topScores(r.Context())
 	if err != nil {
 		log.Printf("leer ranking: %v", err)
 		list = []entry{}
@@ -211,29 +165,137 @@ func (s *server) postScore(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]any{"rank": rank, "top": list})
 }
 
-func connect(ctx context.Context, url string) (*pgxpool.Pool, error) {
-	cfg, err := pgxpool.ParseConfig(url)
+func (s *server) createSession(w http.ResponseWriter, r *http.Request) {
+	if !s.createLim.allow(clientIP(r)) {
+		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "demasiadas salas seguidas, probá en un minuto"})
+		return
+	}
+	var in struct {
+		Kind     string  `json:"kind"`
+		Dur      float64 `json:"dur"`
+		Diff     string  `json:"diff"`
+		TeamSize int     `json:"teamSize"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 512)).Decode(&in); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "datos inválidos"})
+		return
+	}
+	if in.Kind != "clase" {
+		in.Kind = "sala"
+	}
+	if in.Dur < 60 || in.Dur > 600 {
+		in.Dur = 180
+	}
+	if in.Diff != "facil" && in.Diff != "dificil" {
+		in.Diff = "normal"
+	}
+	if in.TeamSize < 2 || in.TeamSize > 8 {
+		in.TeamSize = 4
+	}
+	sess := s.hub.create(in.Kind, in.Dur, in.Diff, in.TeamSize)
+	if sess == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "hay demasiadas salas abiertas, probá en un rato"})
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]string{"code": sess.Code, "key": sess.HostKey})
+}
+
+func (s *server) sessionInfo(w http.ResponseWriter, r *http.Request) {
+	sess := s.hub.get(r.PathValue("code"))
+	if sess == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no existe esa sala"})
+		return
+	}
+	sess.mu.Lock()
+	defer sess.mu.Unlock()
+	writeJSON(w, http.StatusOK, map[string]any{"code": sess.Code, "kind": sess.Kind, "phase": sess.Phase, "players": len(sess.Players)})
+}
+
+func (s *server) topTeams(w http.ResponseWriter, r *http.Request) {
+	list, err := s.store.topTeams(r.Context())
 	if err != nil {
-		return nil, err
+		log.Printf("ranking equipos: %v", err)
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "ranking no disponible"})
+		return
 	}
-	cfg.MaxConns = 8
-	var lastErr error
-	// Postgres puede tardar en aceptar conexiones cuando arranca el stack.
-	for i := 0; i < 30; i++ {
-		var pool *pgxpool.Pool
-		if pool, lastErr = pgxpool.NewWithConfig(ctx, cfg); lastErr == nil {
-			if lastErr = pool.Ping(ctx); lastErr == nil {
-				return pool, nil
+	writeJSON(w, http.StatusOK, map[string]any{"top": list})
+}
+
+// ws atiende jugadores, profes (as=profe) y espectadores (as=ver).
+func (s *server) ws(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	sess := s.hub.get(q.Get("code"))
+	if sess == nil {
+		http.Error(w, "no existe esa sala", http.StatusNotFound)
+		return
+	}
+	as := q.Get("as")
+	if as == "profe" && q.Get("k") != sess.HostKey {
+		http.Error(w, "clave de profe incorrecta", http.StatusForbidden)
+		return
+	}
+	conn, err := websocket.Accept(w, r, nil)
+	if err != nil {
+		return
+	}
+	conn.SetReadLimit(2048)
+	ctx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+	defer conn.CloseNow()
+
+	c := &Client{send: make(chan []byte, 64), watchTeam: -1}
+	switch as {
+	case "profe":
+		c.teacher = true
+		if t, err := strconv.Atoi(q.Get("team")); err == nil {
+			c.watchTeam = t
+		}
+		sess.attachWatcher(c)
+	case "ver":
+		t, _ := strconv.Atoi(q.Get("team"))
+		c.watchTeam = t
+		sess.attachWatcher(c)
+	default:
+		if _, ok := sess.attach(c, q.Get("name"), q.Get("token")); !ok {
+			conn.Close(websocket.StatusPolicyViolation, "sala llena o nombre inválido")
+			return
+		}
+	}
+	defer sess.detach(c)
+
+	go func() {
+		ping := time.NewTicker(20 * time.Second)
+		defer ping.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case b := <-c.send:
+				wc, cancelW := context.WithTimeout(ctx, 4*time.Second)
+				err := conn.Write(wc, websocket.MessageText, b)
+				cancelW()
+				if err != nil {
+					cancel()
+					return
+				}
+			case <-ping.C:
+				pc, cancelP := context.WithTimeout(ctx, 10*time.Second)
+				err := conn.Ping(pc)
+				cancelP()
+				if err != nil {
+					cancel()
+					return
+				}
 			}
-			pool.Close()
 		}
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-time.After(2 * time.Second):
+	}()
+	for {
+		_, data, err := conn.Read(ctx)
+		if err != nil {
+			return
 		}
+		sess.handle(c, data)
 	}
-	return nil, lastErr
 }
 
 func securityHeaders(next http.Handler) http.Handler {
@@ -244,6 +306,18 @@ func securityHeaders(next http.Handler) http.Handler {
 		h.Set("Permissions-Policy", "camera=(self), microphone=()")
 		next.ServeHTTP(w, r)
 	})
+}
+
+func page(web fs.FS, name string) http.HandlerFunc {
+	b, err := fs.ReadFile(web, name)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Write(b)
+	}
 }
 
 func main() {
@@ -258,34 +332,65 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	db, err := connect(ctx, url)
+	store, err := connect(ctx, url)
 	if err != nil {
 		log.Fatalf("base de datos: %v", err)
 	}
-	defer db.Close()
-	if _, err := db.Exec(ctx, schema, pgx.QueryExecModeSimpleProtocol); err != nil {
-		log.Fatalf("esquema: %v", err)
+	defer store.db.Close()
+	cfg, err := newConfig(ctx, store)
+	if err != nil {
+		log.Fatalf("configuración: %v", err)
 	}
-
-	s := &server{db: db, lim: &limiter{}}
-	page, err := static.ReadFile("index.html")
+	web, err := fs.Sub(webFiles, "web")
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	hub := newHub(cfg, store)
+	s := &server{store: store, hub: hub, cfg: cfg, scoreLim: newLimiter(postLimit), createLim: newLimiter(20)}
+	secret := make([]byte, 32)
+	if _, err := rand.Read(secret); err != nil {
+		log.Fatal(err)
+	}
+	router := os.Getenv("AI_ROUTER_URL")
+	if router == "" {
+		router = "https://ai-router.becode.com.ar"
+	}
+	dev := &Dev{password: os.Getenv("DEV_PASSWORD"), secret: secret, router: strings.TrimRight(router, "/"), cfg: cfg, store: store, hub: hub, web: web,
+		limit: newLimiter(6), client: &http.Client{Timeout: 3 * time.Minute}}
+	if dev.password == "" {
+		log.Print("aviso: DEV_PASSWORD vacía, /dev queda cerrado")
+	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/scores", s.getScores)
 	mux.HandleFunc("POST /api/scores", s.postScore)
+	mux.HandleFunc("POST /api/salas", s.createSession)
+	mux.HandleFunc("GET /api/salas/{code}", s.sessionInfo)
+	mux.HandleFunc("GET /api/equipos/top", s.topTeams)
+	mux.HandleFunc("GET /api/config", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, http.StatusOK, cfg.All()) })
+	mux.HandleFunc("GET /ws", s.ws)
+	mux.HandleFunc("POST /api/dev/login", dev.login)
+	mux.HandleFunc("GET /api/dev/state", dev.guard(dev.state))
+	mux.HandleFunc("POST /api/dev/config", dev.guard(dev.setConfig))
+	mux.HandleFunc("POST /api/dev/revert", dev.guard(dev.revert))
+	mux.HandleFunc("POST /api/dev/request", dev.guard(dev.requestDone))
+	mux.HandleFunc("POST /api/dev/chat", dev.guard(dev.chat))
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
-		if err := db.Ping(r.Context()); err != nil {
+		if err := store.db.Ping(r.Context()); err != nil {
 			http.Error(w, "db", http.StatusServiceUnavailable)
 			return
 		}
 		w.Write([]byte("ok"))
 	})
-	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	mux.HandleFunc("GET /{$}", page(web, "index.html"))
+	mux.HandleFunc("GET /grupal", page(web, "grupal.html"))
+	mux.HandleFunc("GET /profe", page(web, "profe.html"))
+	mux.HandleFunc("GET /dev", page(web, "dev.html"))
+	files := http.FileServerFS(web)
+	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-cache")
-		w.Write(page)
+		files.ServeHTTP(w, r)
 	})
 
 	srv := &http.Server{

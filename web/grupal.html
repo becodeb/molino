@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>La Isla en Equipo</title>
+<meta name="description" content="Cuatro roles conectados: el vigía ve venir el viento, el molino lo atrapa, la red reparte la energía y las luces encienden la ciudad.">
+<meta name="theme-color" content="#10303a">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%2310303a'/%3E%3Cg fill='%23fff1d0'%3E%3Cpath d='M32 32 26 8h12z'/%3E%3Cpath d='M32 32 26 56h12z'/%3E%3Cpath d='M32 32 8 26v12z'/%3E%3Cpath d='M32 32 56 26v12z'/%3E%3C/g%3E%3Ccircle cx='32' cy='32' r='6' fill='%23ffc857'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&family=Fraunces:ital,opsz,wght,SOFT@0,9..144,500..900,100;1,9..144,400..700,100&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/grupal.css">
+</head>
+<body>
+<canvas id="world" role="img" aria-label="Isla compartida por todo el equipo, con el molino en el centro y la ciudad alrededor"></canvas>
+<div id="danger"></div>
+
+<section id="entry" class="overlay group-sheet">
+  <div class="land sheet">
+    <h1 id="title" aria-label="La Isla en Equipo"></h1>
+    <p class="lead" id="entryLead">Cuatro roles, una sola isla. Si uno se duerme, baja el puntaje de todo el equipo.</p>
+    <ol class="chain-intro" id="chainIntro"></ol>
+    <form id="joinForm" class="join" autocomplete="off">
+      <label class="label" for="myName">Tu nombre</label>
+      <input id="myName" maxlength="18" placeholder="Cómo te llamás" required enterkeyhint="next">
+      <div class="join-actions">
+        <button id="btnCreate" type="button" class="btn primary">Crear sala</button>
+        <span class="or">o</span>
+        <div class="code-join">
+          <input id="myCode" maxlength="4" placeholder="CÓDIGO" aria-label="Código de sala" autocapitalize="characters" enterkeyhint="go">
+          <button id="btnJoin" type="submit" class="btn ghost">Unirme</button>
+        </div>
+      </div>
+      <p id="entryErr" class="err" role="alert"></p>
+    </form>
+    <p class="fine links"><a href="/">Jugar solo</a> · <a href="/profe">Soy profe</a></p>
+  </div>
+</section>
+
+<section id="lobby" class="overlay group-sheet hidden">
+  <div class="land sheet">
+    <p class="label" id="lobbyKicker">Sala</p>
+    <div class="room-code"><span id="roomCode">----</span><button id="btnCopy" class="btn ghost" type="button">Copiar enlace</button></div>
+    <h2 id="lobbyTitle">Elegí tu rol</h2>
+    <div class="role-grid" id="roleGrid"></div>
+    <p id="roleHow" class="role-how"></p>
+    <div id="hostControls" class="host-controls">
+      <label>Duración
+        <select id="selDur"><option value="120">2 min</option><option value="180" selected>3 min</option><option value="300">5 min</option></select>
+      </label>
+      <label>Dificultad
+        <select id="selDiff"><option value="facil">Fácil</option><option value="normal" selected>Normal</option><option value="dificil">Difícil</option></select>
+      </label>
+      <button id="btnStart" class="btn primary" type="button">¡Empezar!</button>
+    </div>
+    <p id="lobbyWait" class="fine"></p>
+  </div>
+</section>
+
+<aside id="hudL" class="hud" aria-label="Estado del equipo">
+  <div class="panel team-card">
+    <div class="team-top">
+      <div><span class="label">Puntaje del equipo</span><span id="score">0</span></div>
+      <div class="sync-box" title="Sintonía: multiplica todos los puntos"><span class="label">Sintonía</span><span id="sync">×1.0</span></div>
+    </div>
+    <div class="time-row"><span class="label">Tiempo</span><span id="timeText">3:00</span></div>
+  </div>
+  <div class="panel chain" id="chain" aria-label="Cadena del equipo"></div>
+  <div class="hud-actions">
+    <button id="btnPause" class="btn ghost hidden" type="button">Pausar</button>
+    <button id="btnSound" class="btn ghost" aria-label="Sonido" type="button"><svg viewBox="0 0 24 24"><path d="M4 9.5v5h4l5 4v-13l-5 4z" fill="currentColor"/><path class="w" d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/><path class="x" d="m16.5 9.5 5 5m0-5-5 5"/></svg></button>
+  </div>
+</aside>
+
+<aside id="hudR" class="hud" aria-label="Tu rol">
+  <div class="panel role-head"><span class="role-ico" id="myRoleIco"></span><div><span class="label">Tu rol</span><b id="myRoleName"></b></div></div>
+
+  <div id="camWrap" class="hidden">
+    <div class="cam" id="cam"><video id="vid" playsinline muted></video><canvas id="skel"></canvas><div id="camMsg">Cámara apagada</div></div>
+    <button id="btnCamOn" class="btn ghost cam-btn" type="button">Encender cámara</button>
+    <button id="btnSignsG" class="btn ghost cam-btn hidden" type="button">Cambiar mis señas</button>
+  </div>
+
+  <div id="pMolino" class="role-panel hidden">
+    <div class="panel readout">
+      <div id="gestureNow" class="dim"><span>Mostrá una mano</span></div>
+      <div class="chips" id="chips"></div>
+    </div>
+  </div>
+
+  <div id="pVigia" class="role-panel hidden">
+    <div class="panel info">
+      <p><b>Tocá cada ráfaga en el mar</b> antes de que llegue a la costa. El molino no la ve si no la marcás.</p>
+      <div class="mini-stats"><div><b id="vgOk">0</b><small>a tiempo</small></div><div><b id="vgLost">0</b><small>perdidas</small></div></div>
+    </div>
+  </div>
+
+  <div id="pRed" class="role-panel hidden">
+    <div class="panel grid-panel">
+      <div class="tank-row">
+        <div class="tank" aria-label="Batería"><i id="tankFill"></i><span id="tankText">40</span></div>
+        <div class="flow-box">
+          <span class="label">Energía que soltás</span>
+          <div class="flow" id="flow" role="slider" aria-label="Energía que soltás" aria-valuemin="0" aria-valuemax="100" tabindex="0">
+            <i id="flowBand"></i><i id="flowFill"></i><i id="flowThumb"></i>
+          </div>
+          <div class="flow-read"><span id="supText">0</span> soltás · <span id="demText">0</span> piden</div>
+          <div class="heat"><i id="heatFill"></i></div>
+          <span class="heat-label" id="heatText">Temperatura normal</span>
+        </div>
+      </div>
+      <div class="dists" id="dists"></div>
+    </div>
+  </div>
+
+  <div id="pLuces" class="role-panel hidden">
+    <div class="panel info">
+      <p><b>Tocá las casas.</b> <span class="k-gold">Dorado</span>: llegó gente, prendé. <span class="k-red">Rojo</span>: se fueron, apagá.</p>
+      <div class="mini-stats"><div><b id="lzWant">0</b><small>piden luz</small></div><div><b id="lzOff">0</b><small>para apagar</small></div><div><b id="lzPow">100%</b><small>energía</small></div></div>
+    </div>
+  </div>
+
+  <div class="panel say" id="sayBox"></div>
+</aside>
+
+<div id="toasts" aria-live="polite"></div>
+<div id="pointer" aria-hidden="true"></div>
+<div id="count" aria-live="assertive"></div>
+<div id="netBanner" class="hidden" role="status">Se cortó la conexión. Reconectando…</div>
+<div id="pauseBanner" class="hidden" role="status">Partida en pausa</div>
+
+<section id="end" class="overlay hidden">
+  <div class="end-card sheet">
+    <div id="endKicker" class="rev" style="--d:0"></div>
+    <h2 id="endTitle" class="rev" style="--d:1"></h2>
+    <p id="endText" class="rev" style="--d:2"></p>
+    <div id="endScore" class="rev" style="--d:3">0</div>
+    <div class="links-final rev" id="endLinks" style="--d:4"></div>
+    <div class="end-buttons rev" style="--d:5">
+      <button id="btnAgain" class="btn primary hidden" type="button">Otra ronda</button>
+      <a class="btn ghost" href="/grupal">Salir</a>
+    </div>
+  </div>
+  <div class="panel board sheet rev" style="--d:6">
+    <h3 id="boardTitle">Ranking de equipos</h3>
+    <ol id="boardList"></ol>
+  </div>
+</section>
+
+<script src="/core.js"></script>
+<script src="/signs.js"></script>
+<script src="/grupal.js"></script>
+</body>
+</html>

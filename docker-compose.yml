@@ -1,3 +1,4 @@
+# Para correrlo en local. En producción la app y la base las administra Coolify.
 services:
   web:
     build: .
@@ -5,8 +6,10 @@ services:
     environment:
       DATABASE_URL: postgres://molino:${POSTGRES_PASSWORD:?falta POSTGRES_PASSWORD}@db:5432/molino?sslmode=disable
       PORT: "8080"
-    expose:
-      - "8080"
+      DEV_PASSWORD: ${DEV_PASSWORD:-}
+      AI_ROUTER_URL: ${AI_ROUTER_URL:-https://ai-router.becode.com.ar}
+    ports:
+      - "${PORT:-8080}:8080"
     depends_on:
       db:
         condition: service_healthy
