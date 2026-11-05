@@ -44,6 +44,14 @@ var catalog = []configItem{
 	{"grupal.tormenta_cada", "Grupal: segundos entre tormentas", "number", 15, 180, 42},
 	{"grupal.reparacion", "Grupal: segundos que lleva reparar una línea", "number", .5, 8, 2.2},
 
+	{"atrapa.gap_inicio", "Atrapavientos: segundos entre vientos al empezar", "number", 2, 12, 5.2},
+	{"atrapa.gap_final", "Atrapavientos: segundos entre vientos al final", "number", 1.5, 8, 3},
+	{"atrapa.viaje_inicio", "Atrapavientos: segundos que tarda un viento al empezar", "number", 2, 10, 5},
+	{"atrapa.viaje_final", "Atrapavientos: segundos que tarda un viento al final", "number", 1.5, 8, 3.4},
+	{"atrapa.aviso", "Atrapavientos: ventaja del Anunciador antes de que el viento entre", "number", 1, 8, 3},
+	{"atrapa.rojo_inicio", "Atrapavientos: probabilidad de viento rojo al empezar", "number", 0, .8, .22},
+	{"atrapa.rojo_final", "Atrapavientos: probabilidad de viento rojo al final", "number", 0, .8, .36},
+
 	{"texto.bajada", "Portada: texto bajo el título", "text", 0, 220, "Noventa segundos, del amanecer a la noche. Girá el molino con las manos, atrapá cada ráfaga de frente y encendé todas las casas de la isla."},
 	{"texto.grupal", "Grupal: texto de la portada", "text", 0, 220, "Cuatro roles, una sola isla. Si uno se duerme, baja el puntaje de todo el equipo."},
 }

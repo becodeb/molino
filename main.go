@@ -1,4 +1,4 @@
-// Servidor del Desafío del Molino: sirve el juego, coordina las partidas grupales
+// Servidor de Atrapavientos: sirve el juego, coordina las partidas grupales
 // por WebSocket y guarda rankings y configuración en Postgres.
 package main
 
@@ -171,6 +171,7 @@ func (s *server) createSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var in struct {
+		Game     string  `json:"game"`
 		Kind     string  `json:"kind"`
 		Dur      float64 `json:"dur"`
 		Diff     string  `json:"diff"`
@@ -183,16 +184,21 @@ func (s *server) createSession(w http.ResponseWriter, r *http.Request) {
 	if in.Kind != "clase" {
 		in.Kind = "sala"
 	}
+	if in.Game != "atrapa" {
+		in.Game = "isla"
+	}
 	if in.Dur < 60 || in.Dur > 600 {
 		in.Dur = 180
 	}
 	if in.Diff != "facil" && in.Diff != "dificil" {
 		in.Diff = "normal"
 	}
-	if in.TeamSize < 2 || in.TeamSize > 8 {
+	if in.Game == "atrapa" {
+		in.TeamSize = 2
+	} else if in.TeamSize < 2 || in.TeamSize > 8 {
 		in.TeamSize = 4
 	}
-	sess := s.hub.create(in.Kind, in.Dur, in.Diff, in.TeamSize)
+	sess := s.hub.create(in.Game, in.Kind, in.Dur, in.Diff, in.TeamSize)
 	if sess == nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "hay demasiadas salas abiertas, probá en un rato"})
 		return
@@ -208,11 +214,15 @@ func (s *server) sessionInfo(w http.ResponseWriter, r *http.Request) {
 	}
 	sess.mu.Lock()
 	defer sess.mu.Unlock()
-	writeJSON(w, http.StatusOK, map[string]any{"code": sess.Code, "kind": sess.Kind, "phase": sess.Phase, "players": len(sess.Players)})
+	writeJSON(w, http.StatusOK, map[string]any{"code": sess.Code, "game": sess.Game, "kind": sess.Kind, "phase": sess.Phase, "players": len(sess.Players)})
 }
 
 func (s *server) topTeams(w http.ResponseWriter, r *http.Request) {
-	list, err := s.store.topTeams(r.Context())
+	game := r.URL.Query().Get("game")
+	if game != "atrapa" {
+		game = "isla"
+	}
+	list, err := s.store.topTeams(r.Context(), game)
 	if err != nil {
 		log.Printf("ranking equipos: %v", err)
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "ranking no disponible"})
@@ -385,6 +395,7 @@ func main() {
 	})
 	mux.HandleFunc("GET /{$}", page(web, "index.html"))
 	mux.HandleFunc("GET /grupal", page(web, "grupal.html"))
+	mux.HandleFunc("GET /atrapavientos", page(web, "atrapa.html"))
 	mux.HandleFunc("GET /profe", page(web, "profe.html"))
 	mux.HandleFunc("GET /dev", page(web, "dev.html"))
 	files := http.FileServerFS(web)

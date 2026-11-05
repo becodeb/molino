@@ -63,6 +63,7 @@ function onMessage(m) {
 /* ---------- Sala de espera ---------- */
 function onLobby(m) {
   S.lobby = m;
+  if (m.phase !== 'lobby') $('entry').classList.add('hidden');
   const me = m.players.find(p => p.id === S.me);
   if (me) { S.team = me.team; setRole(me.role || null); }
   if (m.phase === 'lobby') showLobby();
@@ -602,6 +603,7 @@ function drawFog() {
 function onEnd(m) {
   S.results = m.results; S.ended = true; S.view = 'end';
   G.mode = 'end'; G.dayTarget = 1; G.fwIn = 1.2; G.gusts.length = 0; S.known.clear();
+  $('entry').classList.add('hidden'); $('lobby').classList.add('hidden');
   document.body.classList.remove('in-game', 'danger');
   camTarget();
   const team = S.watch !== null ? S.watch : S.team;
@@ -678,6 +680,7 @@ async function joinRoom() {
   const r = await fetch('/api/salas/' + encodeURIComponent(code)).catch(() => null);
   if (!r) { entryError('No hay conexión con el servidor.'); return; }
   if (!r.ok) { entryError('No encontramos esa sala. Revisá el código.'); return; }
+  if ((await r.json()).game === 'atrapa') { location.href = '/atrapavientos?sala=' + code; return; }
   join(code, name);
 }
 function join(code, name) {

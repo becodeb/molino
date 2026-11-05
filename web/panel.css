@@ -130,3 +130,9 @@ td{padding:8px;border-top:1px solid var(--line);font-feature-settings:"tnum"}
   .class-head{grid-template-columns:auto minmax(0,1fr)}.head-count{grid-column:1/3;text-align:left}
   .chat,.side{height:auto;min-height:0}.chat{height:72vh}
 }
+
+.foot{width:min(1240px,100%);margin:0 auto;padding:0 clamp(16px,3vw,38px) 22px}
+.credits{display:flex;align-items:center;gap:10px;font-size:13.5px;color:var(--cream-2)}
+.credits img{height:40px;width:auto}
+.credits b{font-weight:800;color:var(--cream)}
+.logo img{height:38px;width:auto}

@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>La Isla para Profes</title>
+<title>Atrapavientos para Profes</title>
 <meta name="description" content="Armá equipos, seguí a cada grupo en vivo y conversá los resultados con tu clase.">
 <meta name="theme-color" content="#0c2730">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%2310303a'/%3E%3Cg fill='%23fff1d0'%3E%3Cpath d='M32 32 26 8h12z'/%3E%3Cpath d='M32 32 26 56h12z'/%3E%3Cpath d='M32 32 8 26v12z'/%3E%3Cpath d='M32 32 56 26v12z'/%3E%3C/g%3E%3Ccircle cx='32' cy='32' r='6' fill='%236fe3b0'/%3E%3C/svg%3E">
+<link rel="icon" href="/northfield.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&family=Fraunces:opsz,wght,SOFT@9..144,500..900,100&display=swap" rel="stylesheet">
@@ -15,15 +15,17 @@
 <body>
 <div class="wrap">
   <header class="top">
-    <a class="logo" href="/grupal"><svg viewBox="0 0 64 64" aria-hidden="true"><g fill="#fff4d9"><path d="M32 32 26 6h12z"/><path d="M32 32 26 58h12z"/><path d="M32 32 6 26v12z"/><path d="M32 32 58 26v12z"/></g><circle cx="32" cy="32" r="6" fill="#ff6f59"/></svg>La Isla para Profes</a>
+    <a class="logo" href="/"><img src="/northfield.png" alt="" width="30" height="38">Atrapavientos para profes</a>
     <button id="btnLeave" class="btn ghost hidden" type="button">Cerrar esta clase</button>
   </header>
 
   <main id="vSetup" class="setup rise">
     <section>
-      <h1>Tu clase, una isla por equipo</h1>
-      <p class="lede">Cada equipo sostiene una cadena de energía: alguien ve el viento, alguien lo atrapa, alguien lo reparte y alguien enciende la ciudad. Solo les va bien si se organizan.</p>
+      <h1>Tu clase, a atrapar el viento</h1>
+      <p class="lede">Dos juegos para trabajar con roles. En <b>Atrapavientos</b>, de a dos, uno lee los colores del viento y el otro maneja el molino. En <b>La Isla</b>, de a cuatro, sostienen toda la cadena de energía de una ciudad.</p>
       <div class="roles-row">
+        <div class="role-mini"><b>🌀 Director del Molino</b>Inventa sus señas y orienta las aspas.</div>
+        <div class="role-mini"><b>📣 Anunciador de Viento</b>Lee los colores y activa el modo.</div>
         <div class="role-mini"><b>🔭 Vigía</b>Anticipa ráfagas y tormentas.</div>
         <div class="role-mini"><b>🌬️ Molino</b>Inventa sus señas y orienta el molino.</div>
         <div class="role-mini"><b>⚡ Red eléctrica</b>Equilibra oferta y demanda.</div>
@@ -31,18 +33,20 @@
       </div>
       <ul class="teach-list">
         <li>Comunicación y trabajo con roles distintos: nadie gana solo.</li>
-        <li>Energía eólica, oferta, demanda y derroche.</li>
+        <li>Energía eólica, oferta, demanda y cuidado de los equipos.</li>
         <li>Visión artificial: la compu aprende las señas que inventa cada estudiante, y las imágenes no salen del navegador.</li>
       </ul>
     </section>
     <form class="card" id="setupForm">
       <h2>Crear una clase</h2>
       <p class="muted" style="margin:6px 0 16px">Sin cuentas ni datos personales: alcanza con un nombre o apodo por estudiante.</p>
+      <div class="form-row"><label class="label" for="fGame">Juego</label>
+        <select id="fGame"><option value="atrapa" selected>Atrapavientos: equipos de 2</option><option value="isla">La Isla: equipos de 4</option></select></div>
       <div class="form-row"><label class="label" for="fDur">Duración de cada ronda</label>
         <select id="fDur"><option value="120">2 minutos</option><option value="180" selected>3 minutos</option><option value="300">5 minutos</option></select></div>
       <div class="form-row"><label class="label" for="fDiff">Dificultad</label>
         <select id="fDiff"><option value="facil">Fácil: primaria o primera vez</option><option value="normal" selected>Normal</option><option value="dificil">Difícil</option></select></div>
-      <div class="form-row"><label class="label" for="fSize">Estudiantes por equipo</label>
+      <div class="form-row hidden" id="rowSize"><label class="label" for="fSize">Estudiantes por equipo</label>
         <select id="fSize"><option value="2">2 (los otros roles los cubren bots)</option><option value="3">3 (un rol lo cubre un bot)</option><option value="4" selected>4 (un rol por persona)</option><option value="6">5 o 6 (roles compartidos)</option></select></div>
       <button class="btn primary" style="width:100%;min-height:52px" type="submit">Crear clase</button>
       <p class="err" id="setupErr" role="alert" style="margin-top:10px"></p>
@@ -96,6 +100,7 @@
     </section>
   </main>
 </div>
+<footer class="foot"><div class="credits"><img src="/northfield.png" alt="Northfield" width="34" height="42"><span>Desarrollado por <b>TechTeam</b></span></div></footer>
 <script src="/profe.js"></script>
 </body>
 </html>

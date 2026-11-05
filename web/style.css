@@ -304,3 +304,11 @@ body.danger #danger{opacity:1;animation:pulse 1s infinite}
 @media (min-width:1000px) and (min-aspect-ratio:13/10){
   .end-card,.land{overflow:visible}
 }
+
+/* ---------- Marca ---------- */
+h1 .w.gold{color:var(--gold)}
+.credits{display:flex;align-items:center;gap:10px;margin-top:clamp(7px,1.7vh,16px);font-size:clamp(12px,1.8vh,13.5px);font-weight:500;color:var(--cream-2)}
+.credits img{height:clamp(30px,5.4vh,42px);width:auto;flex:none;filter:drop-shadow(0 2px 7px rgba(0,0,0,.45))}
+.credits b{font-weight:800;color:var(--cream)}
+.credits a{color:var(--gold);font-weight:700}
+.end-card a.btn{color:var(--cream)}

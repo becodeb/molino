@@ -650,3 +650,66 @@ func (s *Sim) bots(dt float64) {
 		}
 	}
 }
+
+/* ---------- Match ---------- */
+
+func (s *Sim) Humans() map[Role]bool { return s.Human }
+
+func (s *Sim) Snapshot(phase Phase, count float64) map[string]any {
+	hs := make([]int, len(s.Houses))
+	dl := make([]float64, len(s.Houses))
+	for i := range s.Houses {
+		hs[i] = s.Houses[i].State
+		if st := s.Houses[i].State; st == houseWants || st == houseLeaving {
+			dl[i] = math.Round((s.Houses[i].Deadline-s.T)*10) / 10
+		}
+	}
+	return map[string]any{"t": "s", "phase": phase, "count": count, "T": math.Round(s.T*100) / 100, "D": s.Dur, "score": math.Round(s.Score), "sync": math.Round(s.Sync*100) / 100,
+		"links": s.Links, "bat": math.Round(s.Battery*10) / 10, "flow": s.Flow, "heat": math.Round(s.Heat), "dem": math.Round(s.Demand*100) / 100, "sup": math.Round(s.Supply*100) / 100,
+		"pow": math.Round(s.Power*100) / 100, "mill": s.Mill, "combo": s.Combo, "h": hs, "dl": dl, "d": s.Dists, "g": s.Gusts, "st": s.Storms, "human": s.Human, "ev": s.DrainEvents()}
+}
+
+func (s *Sim) Dash() map[string]any {
+	return map[string]any{"T": math.Round(s.T), "D": s.Dur, "score": math.Round(s.Score), "sync": math.Round(s.Sync*100) / 100, "links": s.Links, "bat": math.Round(s.Battery), "pow": s.Power, "human": s.Human}
+}
+
+func (s *Sim) Result() map[string]any {
+	return map[string]any{"score": math.Round(s.Score), "links": s.Links, "stats": s.Stats, "timeline": s.Timeline, "sync": s.Stats.SyncAvg}
+}
+
+func (s *Sim) Command(r Role, m inMsg) {
+	switch m.T {
+	case "mill":
+		if r == RoleMolino {
+			s.CmdMill(m.A)
+		}
+	case "ping":
+		if r == RoleVigia {
+			s.CmdPing(m.ID)
+		}
+	case "warn":
+		if r == RoleVigia {
+			s.CmdWarn(m.ID)
+		}
+	case "flow":
+		if r == RoleRed {
+			s.CmdFlow(m.V)
+		}
+	case "protect":
+		if r == RoleRed {
+			s.CmdProtect(m.ID)
+		}
+	case "reset":
+		if r == RoleRed {
+			s.CmdReset(m.D)
+		}
+	case "repair":
+		if r == RoleRed {
+			s.CmdRepair(m.D, m.On)
+		}
+	case "house":
+		if r == RoleLuces {
+			s.CmdHouse(m.I)
+		}
+	}
+}

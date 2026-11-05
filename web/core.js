@@ -1,7 +1,7 @@
 
 'use strict';
 /* =====================================================================
-   Desafío del Molino
+   Atrapavientos
    1. Utilidades        5. Generación del mundo    9. Render
    2. Audio             6. Sprites y pintura       10. Visión (MediaPipe)
    3. Señas             7. Estado y reglas         11. Interfaz
@@ -1096,7 +1096,7 @@ function drawGust(g) {
   const night = Sky.night;
   if (g.state === 'warn') {
     const k = clamp(g.warnT / g.warn), x = g.dx * (coastAt(g.a) + 26), y = g.dy * (coastAt(g.a) + 26);
-    const col = g.gold ? '255,214,107' : '255,255,255';
+    const col = g.tint ? g.tint.join(',') : g.gold ? '255,214,107' : '255,255,255';
     ctx.save(); ctx.lineCap = 'round';
     ctx.setLineDash([3, 18]); ctx.lineDashOffset = T * 66; ctx.strokeStyle = `rgba(${col},${smooth(k) * .55})`; ctx.lineWidth = 3;
     ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(g.dx * 205, g.dy * 205); ctx.stroke(); ctx.setLineDash([]);
@@ -1113,9 +1113,9 @@ function drawGust(g) {
   const capT = g.state === 'hit' ? clamp(g.end / .4) : 0, missT = g.state === 'miss' ? clamp(g.end / .95) : 0;
   const alphaG = (1 - capT * capT) * (1 - missT) * smooth(g.t > g.warn ? (g.t - g.warn) / .35 : 0);
   if (alphaG <= .01) return;
-  const col = g.gold ? [255, 208, 96] : missT > 0 ? [lerp(255, 180, missT), lerp(255, 190, missT), lerp(255, 195, missT)] : [255, 255, 255];
+  const col = g.tint && missT === 0 ? g.tint : g.gold ? [255, 208, 96] : missT > 0 ? [lerp(255, 180, missT), lerp(255, 190, missT), lerp(255, 195, missT)] : [255, 255, 255];
   const cs = `${col[0] | 0},${col[1] | 0},${col[2] | 0}`;
-  if (night > .3 || g.gold) ctx.globalCompositeOperation = 'lighter';
+  if ((night > .3 || g.gold) && !g.tint) ctx.globalCompositeOperation = 'lighter';
   const P = 14, Lx = new Float32Array(P + 1), Ly = new Float32Array(P + 1), Rx = new Float32Array(P + 1), Ry = new Float32Array(P + 1);
   for (const rb of g.rbs) {
     const head = g.r + rb.lag * 170;

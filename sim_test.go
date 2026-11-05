@@ -205,3 +205,97 @@ func TestComandoInvalidoNoRompe(t *testing.T) {
 		t.Fatalf("estado inválido: mill=%v flow=%v", s.Mill, s.Flow)
 	}
 }
+
+func TestTresRojosQuemanLosMotores(t *testing.T) {
+	a := newAtrapa(testConfig(t), 120, 1, 1)
+	a.Human[RoleDirector], a.Human[RoleAnunciador] = true, true
+	a.Mode = modeCaptar
+	for i := 0; i < 3; i++ {
+		if a.Burned {
+			t.Fatalf("se quemó antes de tiempo, con %d rojos", i)
+		}
+		a.Winds = []*Wind{{ID: i, Angle: a.Mill, Arrive: 0, Color: windRojo}}
+		a.resolve()
+	}
+	if !a.Burned || a.Stats.Burns != 1 || len(a.Code) != codeLen {
+		t.Fatalf("tres rojos seguidos deberían quemar: %+v", a.Stats)
+	}
+	// Mientras está quemado no entra viento ni gira
+	mill, before := a.Mill, len(a.Winds)
+	a.Command(RoleDirector, inMsg{T: "mill", A: mill + 1})
+	a.Step(5)
+	if a.Mill != mill || len(a.Winds) != before {
+		t.Fatal("con los motores quemados no se puede operar")
+	}
+	// Un error vuelve a empezar la reparación
+	a.CmdFix(a.Code[0])
+	wrong := "left"
+	if a.Code[1] == "left" {
+		wrong = "right"
+	}
+	a.CmdFix(wrong)
+	if a.Step_ != 0 {
+		t.Fatal("una seña equivocada debería reiniciar la reparación")
+	}
+	for _, c := range append([]string{}, a.Code...) {
+		a.CmdFix(c)
+	}
+	if a.Burned || a.Streak != 0 || a.Stats.Repairs != 1 {
+		t.Fatalf("la secuencia correcta debería reparar: burned=%v %+v", a.Burned, a.Stats)
+	}
+}
+
+func TestRojoProtegidoOEsquivadoCortaLaRacha(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		mode int
+		off  float64
+	}{{"protegido", modeProteccion, 0}, {"esquivado", modeCaptar, 2}} {
+		a := newAtrapa(testConfig(t), 120, 1, 1)
+		a.Human[RoleDirector], a.Human[RoleAnunciador] = true, true
+		a.Streak = 2
+		a.Mode = c.mode
+		a.Winds = []*Wind{{ID: 1, Angle: a.Mill + c.off, Arrive: 0, Color: windRojo}}
+		a.resolve()
+		if a.Streak != 0 || a.Burned {
+			t.Errorf("%s: la racha debería cortarse, quedó en %d", c.name, a.Streak)
+		}
+	}
+}
+
+func TestModoCorrectoVale(t *testing.T) {
+	score := func(color, mode int) float64 {
+		a := newAtrapa(testConfig(t), 120, 1, 1)
+		a.Mode = mode
+		a.Winds = []*Wind{{ID: 1, Angle: a.Mill + .3, Arrive: 0, Color: color}} // de frente, sin ser perfecto
+		a.resolve()
+		return a.Score
+	}
+	if !(score(windVerde, modeCaptar) > score(windVerde, modeRefuerzo)) || score(windVerde, modeProteccion) != 0 {
+		t.Error("el verde rinde con Captar y no entra con Protección")
+	}
+	if !(score(windAmarillo, modeRefuerzo) > score(windAmarillo, modeCaptar)) {
+		t.Error("el amarillo rinde con Refuerzo")
+	}
+}
+
+func TestRolesNoSeInvaden(t *testing.T) {
+	a := newAtrapa(testConfig(t), 120, 1, 1)
+	mill := a.Mill
+	a.Command(RoleAnunciador, inMsg{T: "mill", A: mill + 1})
+	a.Command(RoleDirector, inMsg{T: "mode", I: modeProteccion})
+	if a.Mill != mill || a.Mode != modeCaptar {
+		t.Fatal("cada rol solo puede usar sus comandos")
+	}
+}
+
+func TestParDeBotsTermina(t *testing.T) {
+	a := newAtrapa(testConfig(t), 120, 1, 9)
+	for !a.Done() {
+		a.Step(.05)
+	}
+	if a.Score <= 0 || a.Stats.Caught == 0 {
+		t.Fatalf("debería sumar puntos: %+v", a.Stats)
+	}
+	t.Logf("bots: puntaje=%.0f %+v", a.Score, a.Stats)
+}

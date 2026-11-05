@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"log"
-	"math"
 	mrand "math/rand"
 	"sort"
 	"strconv"
@@ -43,10 +42,21 @@ type Player struct {
 	conn  *Client
 }
 
+// Match es una partida de un equipo: la sesión no conoce las reglas de cada juego.
+type Match interface {
+	Step(dt float64)
+	Done() bool
+	Humans() map[Role]bool
+	Command(r Role, m inMsg)
+	Snapshot(phase Phase, count float64) map[string]any
+	Dash() map[string]any
+	Result() map[string]any
+}
+
 type Team struct {
 	Index int    `json:"i"`
 	Name  string `json:"name"`
-	sim   *Sim
+	sim   Match
 }
 
 type Client struct {
@@ -67,6 +77,7 @@ type Session struct {
 	mu       sync.Mutex
 	Code     string
 	Kind     string // sala | clase
+	Game     string // isla | atrapa
 	HostKey  string
 	Dur      float64
 	Diff     string
@@ -107,7 +118,7 @@ func randToken(n int) string {
 
 const codeAlphabet = "ABCDEFGHJKMNPQRSTUVWXYZ"
 
-func (h *Hub) create(kind string, dur float64, diff string, teamSize int) *Session {
+func (h *Hub) create(game, kind string, dur float64, diff string, teamSize int) *Session {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if len(h.sessions) >= maxSessions {
@@ -124,7 +135,7 @@ func (h *Hub) create(kind string, dur float64, diff string, teamSize int) *Sessi
 			break
 		}
 	}
-	s := &Session{Code: code, Kind: kind, HostKey: randToken(16), Dur: dur, Diff: diff, TeamSize: teamSize, Phase: PhaseLobby,
+	s := &Session{Code: code, Game: game, Kind: kind, HostKey: randToken(16), Dur: dur, Diff: diff, TeamSize: teamSize, Phase: PhaseLobby,
 		Players: map[string]*Player{}, clients: map[*Client]bool{}, cfg: h.cfg, store: h.store,
 		created: time.Now(), lastSeen: time.Now(), done: make(chan struct{})}
 	s.Teams = []*Team{{Index: 0, Name: "Equipo 1"}}
@@ -247,8 +258,8 @@ func (s *Session) loop(onExit func()) {
 
 // Un rol lo cubre un bot si quien lo tenía se desconectó.
 func (s *Session) syncHumans(tm *Team) {
-	h := tm.sim.Human
-	for _, r := range allRoles {
+	h := tm.sim.Humans()
+	for _, r := range s.roles() {
 		h[r] = false
 	}
 	for _, p := range s.Players {
@@ -279,7 +290,7 @@ func (s *Session) lobbyMsg() map[string]any {
 	for _, p := range players {
 		rows = append(rows, map[string]any{"id": p.ID, "name": p.Name, "team": p.Team, "role": p.Role, "online": p.conn != nil})
 	}
-	return map[string]any{"t": "lobby", "code": s.Code, "kind": s.Kind, "phase": s.Phase, "dur": s.Dur, "diff": s.Diff, "teamSize": s.TeamSize,
+	return map[string]any{"t": "lobby", "game": s.Game, "code": s.Code, "kind": s.Kind, "phase": s.Phase, "dur": s.Dur, "diff": s.Diff, "teamSize": s.TeamSize,
 		"players": rows, "teams": s.Teams, "host": s.hostID, "count": s.count}
 }
 
@@ -290,28 +301,13 @@ func (s *Session) broadcastLobby() {
 	}
 }
 
-func (tm *Team) snapshot(s *Session) map[string]any {
-	sm := tm.sim
-	hs := make([]int, len(sm.Houses))
-	dl := make([]float64, len(sm.Houses))
-	for i := range sm.Houses {
-		hs[i] = sm.Houses[i].State
-		if st := sm.Houses[i].State; st == houseWants || st == houseLeaving {
-			dl[i] = math.Round((sm.Houses[i].Deadline-sm.T)*10) / 10
-		}
-	}
-	return map[string]any{"t": "s", "phase": s.Phase, "count": s.count, "T": math.Round(sm.T*100) / 100, "D": sm.Dur, "score": math.Round(sm.Score), "sync": math.Round(sm.Sync*100) / 100,
-		"links": sm.Links, "bat": math.Round(sm.Battery*10) / 10, "flow": sm.Flow, "heat": math.Round(sm.Heat), "dem": math.Round(sm.Demand*100) / 100, "sup": math.Round(sm.Supply*100) / 100,
-		"pow": math.Round(sm.Power*100) / 100, "mill": sm.Mill, "combo": sm.Combo, "h": hs, "dl": dl, "d": sm.Dists, "g": sm.Gusts, "st": sm.Storms, "human": sm.Human, "ev": sm.DrainEvents()}
-}
-
 func (s *Session) broadcastSnapshots() {
 	byTeam := map[int][]byte{}
 	for _, tm := range s.Teams {
 		if tm.sim == nil {
 			continue
 		}
-		byTeam[tm.Index] = encode(tm.snapshot(s))
+		byTeam[tm.Index] = encode(tm.sim.Snapshot(s.Phase, s.count))
 	}
 	for c := range s.clients {
 		team := c.watchTeam
@@ -328,19 +324,14 @@ func (s *Session) broadcastDash() {
 	teams := make([]map[string]any, 0, len(s.Teams))
 	for _, tm := range s.Teams {
 		row := map[string]any{"i": tm.Index, "name": tm.Name}
-		if sm := tm.sim; sm != nil {
-			row["T"] = math.Round(sm.T)
-			row["D"] = sm.Dur
-			row["score"] = math.Round(sm.Score)
-			row["sync"] = math.Round(sm.Sync*100) / 100
-			row["links"] = sm.Links
-			row["bat"] = math.Round(sm.Battery)
-			row["pow"] = sm.Power
-			row["human"] = sm.Human
+		if tm.sim != nil {
+			for k, v := range tm.sim.Dash() {
+				row[k] = v
+			}
 		}
 		teams = append(teams, row)
 	}
-	b := encode(map[string]any{"t": "dash", "phase": s.Phase, "teams": teams})
+	b := encode(map[string]any{"t": "dash", "phase": s.Phase, "game": s.Game, "teams": teams})
 	for c := range s.clients {
 		if c.teacher {
 			c.push(b)
@@ -370,7 +361,7 @@ func (s *Session) autoTeams(n int) {
 	for i, p := range players {
 		t := i % n
 		p.Team = t
-		p.Role = allRoles[counters[t]%len(allRoles)]
+		p.Role = s.roles()[counters[t]%len(s.roles())]
 		counters[t]++
 	}
 }
@@ -379,7 +370,11 @@ func (s *Session) start() {
 	seed := time.Now().UnixNano()
 	dv := diffValue(s.Diff)
 	for _, tm := range s.Teams {
-		tm.sim = newSim(s.cfg, s.Dur, dv, seed+int64(tm.Index)*97)
+		if s.Game == "atrapa" {
+			tm.sim = newAtrapa(s.cfg, s.Dur, dv, seed+int64(tm.Index)*97)
+		} else {
+			tm.sim = newSim(s.cfg, s.Dur, dv, seed+int64(tm.Index)*97)
+		}
 		s.syncHumans(tm)
 	}
 	s.results = nil
@@ -395,33 +390,34 @@ func (s *Session) finish() {
 		if tm.sim == nil {
 			continue
 		}
-		sm := tm.sim
 		members := []map[string]any{}
 		for _, p := range s.Players {
 			if p.Team == tm.Index {
 				members = append(members, map[string]any{"name": p.Name, "role": p.Role})
 			}
 		}
-		results = append(results, map[string]any{"i": tm.Index, "name": tm.Name, "score": math.Round(sm.Score), "links": sm.Links, "stats": sm.Stats, "timeline": sm.Timeline, "members": members, "humans": len(members)})
+		r := tm.sim.Result()
+		r["i"], r["name"], r["members"], r["humans"] = tm.Index, tm.Name, members, len(members)
+		results = append(results, r)
 	}
 	sort.Slice(results, func(i, j int) bool { return results[i]["score"].(float64) > results[j]["score"].(float64) })
 	s.results = results
-	b := encode(map[string]any{"t": "end", "results": results, "code": s.Code, "kind": s.Kind})
+	b := encode(map[string]any{"t": "end", "results": results, "code": s.Code, "kind": s.Kind, "game": s.Game})
 	for c := range s.clients {
 		c.push(b)
 	}
 	s.broadcastLobby()
 	if s.store != nil {
-		code, kind, diff, dur := s.Code, s.Kind, s.Diff, s.Dur
+		code, game, kind, diff, dur := s.Code, s.Game, s.Kind, s.Diff, s.Dur
 		rows := results
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			for _, r := range rows {
-				if r["humans"].(int) == 0 {
+				if r["humans"].(int) == 0 || r["score"].(float64) <= 0 {
 					continue
 				}
-				if err := s.store.saveTeam(ctx, code, kind, diff, dur, r); err != nil {
+				if err := s.store.saveTeam(ctx, code, game, kind, diff, dur, r); err != nil {
 					log.Printf("guardar equipo: %v", err)
 				}
 			}
@@ -446,12 +442,20 @@ type inMsg struct {
 	Dur    float64 `json:"dur"`
 	Diff   string  `json:"diff"`
 	K      string  `json:"k"`
+	G      string  `json:"g"`
 }
 
-var sayKeys = map[string]bool{"storm": true, "wind": true, "mark": true, "thanks": true, "off": true, "more": true, "less": true}
+var sayKeys = map[string]bool{"red": true, "turn": true, "ready": true, "code": true, "storm": true, "wind": true, "mark": true, "thanks": true, "off": true, "more": true, "less": true}
 
-func validRole(r Role) bool {
-	for _, x := range allRoles {
+func (s *Session) roles() []Role {
+	if s.Game == "atrapa" {
+		return atrapaRoles
+	}
+	return allRoles
+}
+
+func (s *Session) validRole(r Role) bool {
+	for _, x := range s.roles() {
 		if x == r {
 			return true
 		}
@@ -470,11 +474,15 @@ func (s *Session) handle(c *Client, raw []byte) {
 
 	switch m.T {
 	case "role": // en una sala cada quien elige su rol
-		if c.player != nil && s.Kind == "sala" && s.Phase != PhasePlay && s.Phase != PhaseCountdown && validRole(m.Role) {
-			if m.Role == RoleMolino {
+		if c.player != nil && s.Kind == "sala" && s.Phase != PhasePlay && s.Phase != PhaseCountdown && s.validRole(m.Role) {
+			// El molino lo maneja una sola persona; en Atrapavientos cada rol es de una y se intercambian
+			if m.Role == RoleMolino || s.Game == "atrapa" {
 				for _, p := range s.Players {
-					if p != c.player && p.Team == c.player.Team && p.Role == RoleMolino {
+					if p != c.player && p.Team == c.player.Team && p.Role == m.Role {
 						p.Role = ""
+						if s.Game == "atrapa" {
+							p.Role = c.player.Role
+						}
 					}
 				}
 			}
@@ -508,7 +516,7 @@ func (s *Session) handle(c *Client, raw []byte) {
 		if c.teacher && s.Phase != PhasePlay && s.Phase != PhaseCountdown {
 			if p := s.Players[m.Player]; p != nil && m.Team >= 0 && m.Team < len(s.Teams) {
 				p.Team = m.Team
-				if validRole(m.Role) {
+				if s.validRole(m.Role) {
 					p.Role = m.Role
 				}
 				s.broadcastLobby()
@@ -561,46 +569,16 @@ func (s *Session) handle(c *Client, raw []byte) {
 	if c.player.Team >= len(s.Teams) || s.Teams[c.player.Team].sim == nil {
 		return
 	}
-	sm := s.Teams[c.player.Team].sim
-	r := c.player.Role
-	switch m.T {
-	case "mill":
-		if r == RoleMolino {
-			sm.CmdMill(m.A)
+	if m.T == "say" {
+		if sm, ok := s.Teams[c.player.Team].sim.(*Sim); ok && sayKeys[m.K] {
+			sm.emit(Event{"k": "say", "m": m.K, "r": c.player.Role, "from": c.player.Name})
 		}
-	case "ping":
-		if r == RoleVigia {
-			sm.CmdPing(m.ID)
+		if am, ok := s.Teams[c.player.Team].sim.(*Atrapa); ok && sayKeys[m.K] {
+			am.emit(Event{"k": "say", "m": m.K, "r": c.player.Role, "from": c.player.Name})
 		}
-	case "warn":
-		if r == RoleVigia {
-			sm.CmdWarn(m.ID)
-		}
-	case "flow":
-		if r == RoleRed {
-			sm.CmdFlow(m.V)
-		}
-	case "protect":
-		if r == RoleRed {
-			sm.CmdProtect(m.ID)
-		}
-	case "reset":
-		if r == RoleRed {
-			sm.CmdReset(m.D)
-		}
-	case "repair":
-		if r == RoleRed {
-			sm.CmdRepair(m.D, m.On)
-		}
-	case "house":
-		if r == RoleLuces {
-			sm.CmdHouse(m.I)
-		}
-	case "say":
-		if sayKeys[m.K] {
-			sm.emit(Event{"k": "say", "m": m.K, "r": r, "from": c.player.Name})
-		}
+		return
 	}
+	s.Teams[c.player.Team].sim.Command(c.player.Role, m)
 }
 
 /* ---------- Altas y bajas ---------- */
@@ -636,14 +614,18 @@ func (s *Session) attach(c *Client, name, token string) (*Player, bool) {
 					taken[x.Role] = true
 				}
 			}
-			for _, r := range []Role{RoleMolino, RoleLuces, RoleRed, RoleVigia} {
+			order := []Role{RoleMolino, RoleLuces, RoleRed, RoleVigia}
+			if s.Game == "atrapa" {
+				order = atrapaRoles
+			}
+			for _, r := range order {
 				if !taken[r] {
 					p.Role = r
 					break
 				}
 			}
 			if p.Role == "" {
-				p.Role = RoleLuces
+				p.Role = order[len(order)-1]
 			}
 		} else if len(s.Teams) > 0 {
 			// Hasta que el profe arme los equipos, todos esperan en el primero
@@ -654,7 +636,7 @@ func (s *Session) attach(c *Client, name, token string) (*Player, bool) {
 				}
 			}
 			p.Team = 0
-			p.Role = allRoles[count%len(allRoles)]
+			p.Role = s.roles()[count%len(s.roles())]
 		}
 	}
 	if p.conn != nil {
@@ -667,7 +649,7 @@ func (s *Session) attach(c *Client, name, token string) (*Player, bool) {
 	c.push(encode(map[string]any{"t": "hello", "id": p.ID, "token": p.token, "name": p.Name}))
 	c.push(encode(s.lobbyMsg()))
 	if s.Phase == PhaseEnd && s.results != nil {
-		c.push(encode(map[string]any{"t": "end", "results": s.results, "code": s.Code, "kind": s.Kind}))
+		c.push(encode(map[string]any{"t": "end", "results": s.results, "code": s.Code, "kind": s.Kind, "game": s.Game}))
 	}
 	s.broadcastLobby()
 	return p, true
@@ -679,7 +661,7 @@ func (s *Session) attachWatcher(c *Client) {
 	s.clients[c] = true
 	c.push(encode(s.lobbyMsg()))
 	if s.Phase == PhaseEnd && s.results != nil {
-		c.push(encode(map[string]any{"t": "end", "results": s.results, "code": s.Code, "kind": s.Kind}))
+		c.push(encode(map[string]any{"t": "end", "results": s.results, "code": s.Code, "kind": s.Kind, "game": s.Game}))
 	}
 }
 

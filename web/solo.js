@@ -226,13 +226,9 @@ function showError(kind) {
 
 (function initUI() {
   // Título con letras animadas
-  const words = [['Desafío', 0], ['del', 1], ['Molino', 0]]; let i = 0, html = '';
-  words.forEach(([w, em], n) => {
-    const letters = [...w].map(ch => `<span class="l" style="--i:${i++}">${ch}</span>`).join('');
-    html += em ? `<em class="w" aria-hidden="true">${letters}</em> ` : `<span class="w" aria-hidden="true">${letters}</span>${n === 0 ? ' ' : ''}`;
-    if (n === 1) html += '<br>';
-  });
-  $('title').innerHTML = html;
+  let i = 0;
+  const part = (w, cls) => `<span class="w ${cls}" aria-hidden="true">${[...w].map(ch => `<span class="l" style="--i:${i++}">${ch}</span>`).join('')}</span>`;
+  $('title').innerHTML = part('Atrapa', '') + '<br>' + part('vientos', 'gold');
   const guide = { left: 'gira a la izquierda', right: 'gira a la derecha', open: 'empieza a rotar', fist: 'frena en seco' };
   $('guide').innerHTML = SIGN_ORDER.map(k => `<div class="gcard"><span class="sign-thumb" data-sign="${k}"></span><b>${GESTURES[k].t}</b><small>${guide[k]}</small></div>`).join('');
   $('chips').innerHTML = SIGN_ORDER.map(k => `<div class="chip" data-g="${k}" title="${GESTURES[k].t}"><span class="sign-thumb" data-sign="${k}"></span><span>${GESTURES[k].t}</span><span class="ok">✓</span></div>`).join('');

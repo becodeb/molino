@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Atrapavientos</title>
+<meta name="description" content="Dos jugadores, un molino. El Anunciador lee los colores del viento y el Director orienta las aspas. Tres vientos rojos seguidos queman los motores.">
+<meta name="theme-color" content="#10303a">
+<link rel="icon" href="/northfield.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&family=Fraunces:ital,opsz,wght,SOFT@0,9..144,500..900,100;1,9..144,400..700,100&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/grupal.css">
+</head>
+<body>
+<canvas id="world" role="img" aria-label="Isla con un molino en el centro y vientos de colores que llegan desde el mar"></canvas>
+<div id="danger"></div>
+
+<section id="entry" class="overlay group-sheet">
+  <div class="land sheet">
+    <h1 id="title" aria-label="Atrapavientos"></h1>
+    <p class="lead" id="entryLead">Dos jugadores, un molino. Uno lee el viento, el otro mueve las aspas. Hablen: tres vientos rojos seguidos queman los motores.</p>
+    <ol class="chain-intro two" id="chainIntro"></ol>
+    <form id="joinForm" class="join" autocomplete="off">
+      <label class="label" for="myName">Tu nombre</label>
+      <input id="myName" maxlength="18" placeholder="Cómo te llamás" required enterkeyhint="next">
+      <div class="join-actions">
+        <button id="btnCreate" type="button" class="btn primary">Crear partida</button>
+        <span class="or">o</span>
+        <div class="code-join">
+          <input id="myCode" maxlength="4" placeholder="CÓDIGO" aria-label="Código de la partida" autocapitalize="characters" enterkeyhint="go">
+          <button id="btnJoin" type="submit" class="btn ghost">Unirme</button>
+        </div>
+      </div>
+      <p id="entryErr" class="err" role="alert"></p>
+    </form>
+    <div class="credits"><img src="/northfield.png" alt="Northfield" width="34" height="42"><span>Desarrollado por <b>TechTeam</b> · <a href="/">Jugar solo</a> · <a href="/grupal">La Isla</a> · <a href="/profe">Soy profe</a></span></div>
+  </div>
+</section>
+
+<section id="lobby" class="overlay group-sheet hidden">
+  <div class="land sheet">
+    <p class="label" id="lobbyKicker">Partida</p>
+    <div class="room-code"><span id="roomCode">----</span><button id="btnCopy" class="btn ghost" type="button">Copiar enlace</button></div>
+    <h2 id="lobbyTitle">Elegí tu rol</h2>
+    <div class="role-grid" id="roleGrid"></div>
+    <p id="roleHow" class="role-how"></p>
+    <div id="hostControls" class="host-controls">
+      <label>Duración
+        <select id="selDur"><option value="120">2 min</option><option value="180">3 min</option><option value="300">5 min</option></select>
+      </label>
+      <label>Dificultad
+        <select id="selDiff"><option value="facil">Fácil</option><option value="normal" selected>Normal</option><option value="dificil">Difícil</option></select>
+      </label>
+      <button id="btnStart" class="btn primary" type="button">¡Empezar!</button>
+    </div>
+    <p id="lobbyWait" class="fine"></p>
+  </div>
+</section>
+
+<aside id="hudL" class="hud" aria-label="Estado del equipo">
+  <div class="panel team-card">
+    <div class="team-top">
+      <div><span class="label">Puntaje del equipo</span><span id="score">0</span></div>
+      <div class="sync-box"><span class="label">Racha</span><span id="sync">×0</span></div>
+    </div>
+    <div class="time-row"><span class="label">Tiempo</span><span id="timeText">2:00</span></div>
+  </div>
+  <div class="panel motor-card">
+    <span class="label">Motores</span>
+    <div class="lamps" id="lamps" aria-live="polite"><i></i><i></i><i></i></div>
+    <p id="motorText">Sin daños</p>
+  </div>
+  <div class="panel mode-card" id="modeCard">
+    <span class="label">Modo activo</span>
+    <b id="modeName">Captar</b>
+    <small id="modeHint"></small>
+  </div>
+  <div class="hud-actions">
+    <button id="btnPause" class="btn ghost hidden" type="button">Pausar</button>
+    <button id="btnSound" class="btn ghost" aria-label="Sonido" type="button"><svg viewBox="0 0 24 24"><path d="M4 9.5v5h4l5 4v-13l-5 4z" fill="currentColor"/><path class="w" d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/><path class="x" d="m16.5 9.5 5 5m0-5-5 5"/></svg></button>
+  </div>
+</aside>
+
+<aside id="hudR" class="hud" aria-label="Tu rol">
+  <div class="panel role-head"><span class="role-ico" id="myRoleIco"></span><div><span class="label">Tu rol</span><b id="myRoleName"></b></div></div>
+
+  <div id="pDirector" class="role-panel hidden">
+    <div id="camWrap">
+      <div class="cam" id="cam"><video id="vid" playsinline muted></video><canvas id="skel"></canvas><div id="camMsg">Encendé la cámara o usá los botones y las flechas</div></div>
+      <button id="btnCamOn" class="btn ghost cam-btn" type="button">Encender cámara</button>
+      <button id="btnSignsG" class="btn ghost cam-btn hidden" type="button">Cambiar mis señas</button>
+    </div>
+    <div class="panel readout">
+      <div id="gestureNow" class="dim"><span>Mostrá una mano</span></div>
+      <div class="chips" id="chips"></div>
+    </div>
+    <div class="panel info"><p>No ves los colores: <b>escuchá al Anunciador.</b> Con un viento rojo, girá para otro lado o esperá la protección.</p></div>
+  </div>
+
+  <div id="pAnunciador" class="role-panel hidden">
+    <div class="panel modes" id="modes" role="group" aria-label="Modo operativo"></div>
+    <div class="panel info"><span class="label">Vienen ahora</span><div class="next-winds" id="nextWinds"></div></div>
+    <div class="panel info"><p><b>Avisale al Director</b> de dónde viene cada viento. Si es rojo, poné Protección o decile que gire.</p></div>
+  </div>
+  <div class="panel say" id="sayBox"></div>
+</aside>
+
+<section id="repair" class="repair hidden" aria-live="assertive">
+  <div class="panel repair-box">
+    <p class="label">Reparación obligatoria</p>
+    <h2>¡Motores quemados!</h2>
+    <p id="repairText"></p>
+    <div class="slots" id="slots"></div>
+    <div class="chips repair-chips hidden" id="repairChips"></div>
+  </div>
+</section>
+
+<div id="toasts" aria-live="polite"></div>
+<div id="count" aria-live="assertive"></div>
+<div id="netBanner" class="hidden" role="status">Se cortó la conexión. Reconectando…</div>
+<div id="pauseBanner" class="hidden" role="status">Partida en pausa</div>
+
+<section id="end" class="overlay hidden">
+  <div class="end-card sheet">
+    <div id="endKicker" class="rev" style="--d:0"></div>
+    <h2 id="endTitle" class="rev" style="--d:1"></h2>
+    <p id="endText" class="rev" style="--d:2"></p>
+    <div id="endScore" class="rev" style="--d:3">0</div>
+    <div class="links-final rev" id="endLinks" style="--d:4"></div>
+    <div class="end-buttons rev" style="--d:5">
+      <button id="btnAgain" class="btn primary hidden" type="button">Otra ronda</button>
+      <a class="btn ghost" href="/atrapavientos">Salir</a>
+    </div>
+    <div class="credits rev" style="--d:6"><img src="/northfield.png" alt="Northfield" width="34" height="42"><span>Desarrollado por <b>TechTeam</b></span></div>
+  </div>
+  <div class="panel board sheet rev" style="--d:6">
+    <h3 id="boardTitle">Mejores equipos</h3>
+    <ol id="boardList"></ol>
+  </div>
+</section>
+
+<script src="/core.js"></script>
+<script src="/signs.js"></script>
+<script src="/atrapa.js"></script>
+</body>
+</html>

@@ -37,6 +37,8 @@ CREATE TABLE IF NOT EXISTS team_results (
 );
 CREATE INDEX IF NOT EXISTS team_results_rank_idx ON team_results (score DESC, created_at ASC);
 
+ALTER TABLE team_results ADD COLUMN IF NOT EXISTS game TEXT NOT NULL DEFAULT 'isla';
+
 CREATE TABLE IF NOT EXISTS config_current (
 	key        TEXT PRIMARY KEY,
 	value      JSONB       NOT NULL,
@@ -136,13 +138,13 @@ func (s *Store) addScore(ctx context.Context, sub submission) (rank int, err err
 
 /* ---------- Ranking de equipos ---------- */
 
-func (s *Store) saveTeam(ctx context.Context, code, kind, diff string, dur float64, r map[string]any) error {
-	stats := r["stats"].(Stats)
+func (s *Store) saveTeam(ctx context.Context, code, game, kind, diff string, dur float64, r map[string]any) error {
 	members, _ := json.Marshal(r["members"])
-	st, _ := json.Marshal(stats)
+	st, _ := json.Marshal(r["stats"])
+	sync, _ := r["sync"].(float64)
 	_, err := s.db.Exec(ctx, `
-		INSERT INTO team_results (code, kind, difficulty, duration, team_name, score, sync_avg, members, stats)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`, code, kind, diff, int(dur), r["name"], int(r["score"].(float64)), stats.SyncAvg, members, st)
+		INSERT INTO team_results (code, game, kind, difficulty, duration, team_name, score, sync_avg, members, stats)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, code, game, kind, diff, int(dur), r["name"], int(r["score"].(float64)), sync, members, st)
 	return err
 }
 
@@ -154,10 +156,10 @@ type teamRow struct {
 	Diff    string          `json:"difficulty"`
 }
 
-func (s *Store) topTeams(ctx context.Context) ([]teamRow, error) {
+func (s *Store) topTeams(ctx context.Context, game string) ([]teamRow, error) {
 	rows, err := s.db.Query(ctx, `
 		SELECT team_name, score, sync_avg, members, difficulty
-		FROM team_results ORDER BY score DESC, created_at ASC LIMIT $1`, topLimit)
+		FROM team_results WHERE game = $2 ORDER BY score DESC, created_at ASC LIMIT $1`, topLimit, game)
 	if err != nil {
 		return nil, err
 	}

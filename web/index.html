@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Desafío del Molino</title>
+<title>Atrapavientos</title>
 <meta name="description" content="Orientá un molino con las manos, atrapá el viento y encendé un pueblo entero antes de que caiga la noche.">
 <meta name="theme-color" content="#10303a">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%2310303a'/%3E%3Cg fill='%23fff1d0'%3E%3Cpath d='M32 32 26 8h12z'/%3E%3Cpath d='M32 32 26 56h12z'/%3E%3Cpath d='M32 32 8 26v12z'/%3E%3Cpath d='M32 32 56 26v12z'/%3E%3C/g%3E%3Ccircle cx='32' cy='32' r='6' fill='%23e8513f'/%3E%3C/svg%3E">
+<link rel="icon" href="/northfield.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
@@ -19,7 +19,7 @@
 
 <section id="landing" class="overlay">
   <div class="land sheet">
-    <h1 id="title" aria-label="Desafío del Molino"></h1>
+    <h1 id="title" aria-label="Atrapavientos"></h1>
     <p class="lead">Noventa segundos, del amanecer a la noche. Inventá tus propias señas, girá el molino con las manos, atrapá cada ráfaga de frente y encendé todas las casas de la isla.</p>
     <div class="gestures" id="guide"></div>
     <div class="cta">
@@ -27,12 +27,13 @@
       <button id="btnKeys" class="btn ghost">Jugar con teclado</button>
     </div>
     <div id="err" role="alert"></div>
-    <p class="fine">Tu imagen se analiza en este navegador y no se envía a ningún lado. <a href="/grupal" style="color:var(--gold);font-weight:700">Jugar en equipo</a></p>
+    <p class="fine">Tu imagen se analiza en este navegador y no se envía a ningún lado.</p>
+    <div class="credits"><img src="/northfield.png" alt="Northfield" width="34" height="42"><span>Desarrollado por <b>TechTeam</b> · <a href="/atrapavientos">Jugar de a dos</a> · <a href="/grupal">La Isla</a> · <a href="/profe">Soy profe</a></span></div>
   </div>
 </section>
 
 <aside id="hudL" class="hud" aria-label="Estadísticas de la partida">
-  <div class="brand"><svg viewBox="0 0 64 64" aria-hidden="true"><g fill="#fff4d9"><path d="M32 32 26 6h12z"/><path d="M32 32 26 58h12z"/><path d="M32 32 6 26v12z"/><path d="M32 32 58 26v12z"/></g><circle cx="32" cy="32" r="6" fill="#ff6f59"/></svg><b>Desafío<br>del Molino</b></div>
+  <div class="brand"><svg viewBox="0 0 64 64" aria-hidden="true"><g fill="#fff4d9"><path d="M32 32 26 6h12z"/><path d="M32 32 26 58h12z"/><path d="M32 32 6 26v12z"/><path d="M32 32 58 26v12z"/></g><circle cx="32" cy="32" r="6" fill="#ff6f59"/></svg><b>Atrapa<br>vientos</b></div>
   <div class="panel score-card"><span class="label">Puntaje</span><span id="score">0</span><span id="combo"></span></div>
   <div class="panel time-card" id="timeCard"><span class="label">Tiempo</span>
     <div class="dial"><svg viewBox="0 0 170 92" aria-hidden="true">
@@ -91,6 +92,7 @@
       <div class="stat"><b id="stAvg">0%</b><small>eficiencia media</small></div>
     </div>
     <button id="btnAgain" class="btn primary rev" style="--d:5">Jugar de nuevo</button>
+    <div class="rev" style="--d:6"><div class="credits"><img src="/northfield.png" alt="Northfield" width="34" height="42"><span>Desarrollado por <b>TechTeam</b></span></div></div>
   </div>
   <div class="panel board sheet rev" style="--d:6">
     <h3>Ranking de la isla</h3>

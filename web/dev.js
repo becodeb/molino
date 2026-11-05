@@ -35,11 +35,11 @@ function renderPanel() {
   // Parámetros (no se redibujan mientras alguien está escribiendo en ellos)
   if (!$('tabCfg').contains(document.activeElement)) {
     const box = $('tabCfg'); box.textContent = ''; let group = '';
-    const names = { solo: 'Modo solo', grupal: 'Modo grupal', texto: 'Textos' };
+    const names = { solo: 'Modo solo', grupal: 'La Isla', atrapa: 'Atrapavientos de a dos', texto: 'Textos' };
     s.catalog.forEach(it => {
       const g = it.key.split('.')[0];
       if (g !== group) { group = g; box.append(el('div', 'cfg-group', names[g] || g)); }
-      const row = el('label', 'cfg' + (it.kind === 'text' ? ' text' : '')), name = el('div', '', it.label.replace(/^(Modo solo|Grupal|Portada): /, ''));
+      const row = el('label', 'cfg' + (it.kind === 'text' ? ' text' : '')), name = el('div', '', it.label.replace(/^(Modo solo|Grupal|Portada|Atrapavientos): /, ''));
       if (it.kind === 'number') name.append(el('small', '', `de ${it.min} a ${it.max}`));
       const input = el(it.kind === 'text' ? 'textarea' : 'input');
       if (it.kind === 'number') { input.type = 'number'; input.step = 'any'; input.min = it.min; input.max = it.max; }
